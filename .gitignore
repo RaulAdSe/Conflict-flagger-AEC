@@ -45,5 +45,5 @@ htmlcov/
 Thumbs.db
 
 # Project specific
-data/output/*.xlsx
+data/
 *.log
