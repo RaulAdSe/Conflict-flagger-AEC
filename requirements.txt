@@ -1,3 +1,11 @@
-pandas
-openpyxl
-colorama
+# Core dependencies
+pandas>=2.0.0
+openpyxl>=3.1.0
+ifcopenshell>=0.7.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Development
+colorama>=0.4.6
