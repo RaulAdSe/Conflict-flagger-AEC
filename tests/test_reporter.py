@@ -20,9 +20,9 @@ class TestReportConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = ReportConfig()
-        assert config.color_error == "FF9999"
-        assert config.color_warning == "FFFF99"
-        assert config.color_ok == "99FF99"
+        assert config.color_error == "FF6B6B"  # Soft red
+        assert config.color_warning == "FFE66D"  # Soft yellow
+        assert config.color_ok == "7ED957"  # Soft green
         assert config.show_ok_matches is True
 
     def test_custom_config(self):
@@ -160,7 +160,7 @@ class TestReporter:
             assert result_path.suffix == ".xlsx"
 
     def test_report_has_expected_sheets(self, reporter, sample_match_result, sample_comparison_result):
-        """Test that report has all expected sheets."""
+        """Test that report has all expected sheets (in Spanish)."""
         from openpyxl import load_workbook
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -175,14 +175,15 @@ class TestReporter:
             wb = load_workbook(output_path)
             sheet_names = wb.sheetnames
 
-            assert "Summary" in sheet_names
-            assert "Conflicts" in sheet_names
-            assert "Matched Elements" in sheet_names
-            assert "Missing in BC3" in sheet_names
-            assert "Missing in IFC" in sheet_names
+            # Spanish sheet names
+            assert "Resumen" in sheet_names
+            assert "Discrepancias" in sheet_names
+            assert "Elementos Emparejados" in sheet_names
+            assert "Sin Presupuestar" in sheet_names
+            assert "Sin Modelar" in sheet_names
 
     def test_summary_sheet_content(self, reporter, sample_match_result, sample_comparison_result):
-        """Test summary sheet has correct content."""
+        """Test summary sheet has correct content (in Spanish)."""
         from openpyxl import load_workbook
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -195,10 +196,10 @@ class TestReporter:
             )
 
             wb = load_workbook(output_path)
-            ws = wb["Summary"]
+            ws = wb["Resumen"]
 
-            # Check title
-            assert "IFC-BC3 Comparison Report" in ws["A1"].value
+            # Check title in Spanish
+            assert "INFORME DE COMPARACION IFC - BC3" in ws["A1"].value
 
     def test_conflicts_sheet_has_data(self, reporter, sample_match_result, sample_comparison_result):
         """Test conflicts sheet has data rows."""
@@ -214,30 +215,31 @@ class TestReporter:
             )
 
             wb = load_workbook(output_path)
-            ws = wb["Conflicts"]
+            ws = wb["Discrepancias"]  # Spanish name
 
             # Should have header row + 3 conflict rows
             assert ws.max_row >= 4
 
     def test_generate_json_report(self, reporter, sample_match_result, sample_comparison_result):
-        """Test generating a JSON report."""
+        """Test generating a JSON report (in Spanish)."""
         report = reporter.generate_json_report(
             sample_match_result,
             sample_comparison_result
         )
 
-        assert "summary" in report
-        assert "conflicts" in report
-        assert "matched" in report
-        assert "ifc_only" in report
-        assert "bc3_only" in report
+        # Spanish keys
+        assert "resumen" in report
+        assert "discrepancias" in report
+        assert "emparejados" in report
+        assert "solo_ifc" in report
+        assert "solo_bc3" in report
 
-        # Check conflicts
-        assert len(report["conflicts"]) == 3
+        # Check discrepancias (conflicts)
+        assert len(report["discrepancias"]) == 3
 
-        # Check matched
-        assert len(report["matched"]) == 1
-        assert report["matched"][0]["code"] == "350147"
+        # Check emparejados (matched)
+        assert len(report["emparejados"]) == 1
+        assert report["emparejados"][0]["codigo"] == "350147"
 
     def test_json_report_is_serializable(self, reporter, sample_match_result, sample_comparison_result):
         """Test that JSON report can be serialized."""
