@@ -120,10 +120,10 @@ class TestTestDataGenerator:
 
     def test_create_variants(self, real_bc3_path):
         """Test creating all variants."""
-        from src.test_data_generator import create_test_variants
+        from src.test_data_generator import create_bc3_variants
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            variants = create_test_variants(real_bc3_path, tmpdir)
+            variants = create_bc3_variants(real_bc3_path, tmpdir)
 
             assert len(variants) == 5
             assert 'elements_removed' in variants
