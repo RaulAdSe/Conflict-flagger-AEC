@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from src.matching.matcher import MatchedPair, MatchResult, MatchStatus
+from src.matching.matcher import MatchedPair, MatchResult
 
 
 class ConflictType(Enum):
