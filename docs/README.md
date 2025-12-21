@@ -14,6 +14,7 @@ A system for detecting discrepancies between BIM models (IFC) and cost estimates
 | [Reporter](reporter.md) | Excel and JSON report generation |
 | [CLI](cli.md) | Command line interface |
 | [Test Data Generator](test-data-generator.md) | Test data generation tools |
+| [Desktop App](desktop-app.md) | Future plans for desktop application |
 
 ## System Requirements
 
