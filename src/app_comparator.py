@@ -1,222 +1,643 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
-import ifcopenshell
-import ifcopenshell.util.element
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from tkinter import filedialog, messagebox
 from datetime import datetime
 import os
+import sys
+import subprocess
+from pathlib import Path
+
+# Handle imports for both development and standalone builds
+try:
+    # Development mode (running from source)
+    from src.parsers.ifc_parser import IFCParser
+    from src.parsers.bc3_parser import BC3Parser
+    from src.matching.matcher import Matcher
+    from src.comparison.comparator import Comparator
+    from src.reporting.reporter import Reporter
+except ImportError:
+    # Standalone mode (PyInstaller build)
+    from parsers.ifc_parser import IFCParser
+    from parsers.bc3_parser import BC3Parser
+    from matching.matcher import Matcher
+    from comparison.comparator import Comparator
+    from reporting.reporter import Reporter
+
+
+class ModernUploadZone(tk.Canvas):
+    """A modern upload zone widget with dashed/solid border states matching macOS design."""
+
+    def __init__(self, parent, file_type, hint, on_click, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        self.file_type = file_type
+        self.hint = hint
+        self.on_click = on_click
+        self.is_uploaded = False
+        self.filename = ""
+
+        # Colors from design mockup
+        self.bg_empty = "#FAFAFA"
+        self.bg_uploaded = "#F0FFF4"
+        self.border_empty = "#D2D2D7"
+        self.border_uploaded = "#34C759"
+        self.icon_bg_empty = "#E8E8ED"
+        self.icon_bg_uploaded = "#D1FAE5"
+        self.text_primary = "#1D1D1F"
+        self.text_secondary = "#86868B"
+        self.text_success = "#34C759"
+
+        self.configure(
+            width=250,
+            height=160,
+            bg=self.bg_empty,
+            highlightthickness=0,
+            cursor="hand2"
+        )
+
+        self.bind("<Button-1>", lambda e: self.on_click())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+
+        self.draw()
+
+    def _on_enter(self, event):
+        if not self.is_uploaded:
+            self.configure(bg="#F5F8FF")
+            self.draw()
+
+    def _on_leave(self, event):
+        if not self.is_uploaded:
+            self.configure(bg=self.bg_empty)
+            self.draw()
+
+    def set_uploaded(self, filename):
+        self.is_uploaded = True
+        self.filename = filename
+        self.configure(bg=self.bg_uploaded)
+        self.draw()
+
+    def reset(self):
+        self.is_uploaded = False
+        self.filename = ""
+        self.configure(bg=self.bg_empty)
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+
+        w = self.winfo_reqwidth()
+        h = self.winfo_reqheight()
+
+        # Draw rounded rectangle border
+        border_color = self.border_uploaded if self.is_uploaded else self.border_empty
+        dash_pattern = () if self.is_uploaded else (8, 4)
+
+        # Draw rounded rectangle
+        radius = 12
+        self._draw_rounded_rect(2, 2, w-2, h-2, radius, border_color, dash_pattern)
+
+        # Draw icon background (circle)
+        icon_size = 48
+        icon_x = w // 2
+        icon_y = 40
+        icon_bg = self.icon_bg_uploaded if self.is_uploaded else self.icon_bg_empty
+
+        self.create_oval(
+            icon_x - icon_size//2, icon_y - icon_size//2,
+            icon_x + icon_size//2, icon_y + icon_size//2,
+            fill=icon_bg, outline=""
+        )
+
+        # Draw icon (checkmark if uploaded, building/document if not)
+        icon_color = self.text_success if self.is_uploaded else self.text_secondary
+
+        if self.is_uploaded:
+            # Checkmark icon
+            self.create_line(
+                icon_x - 10, icon_y,
+                icon_x - 3, icon_y + 8,
+                icon_x + 12, icon_y - 8,
+                fill=icon_color, width=2.5, capstyle=tk.ROUND, joinstyle=tk.ROUND
+            )
+        else:
+            # Simple file/building icon
+            if self.file_type == ".IFC":
+                # Building icon - simplified
+                self.create_rectangle(icon_x - 12, icon_y - 10, icon_x + 12, icon_y + 12,
+                                     outline=icon_color, width=1.5)
+                self.create_line(icon_x, icon_y - 14, icon_x, icon_y + 12,
+                                fill=icon_color, width=1.5)
+                self.create_line(icon_x - 12, icon_y, icon_x + 12, icon_y,
+                                fill=icon_color, width=1.5)
+            else:
+                # Document icon
+                self.create_rectangle(icon_x - 10, icon_y - 12, icon_x + 10, icon_y + 12,
+                                     outline=icon_color, width=1.5)
+                self.create_line(icon_x - 6, icon_y - 4, icon_x + 6, icon_y - 4,
+                                fill=icon_color, width=1.5)
+                self.create_line(icon_x - 6, icon_y + 2, icon_x + 6, icon_y + 2,
+                                fill=icon_color, width=1.5)
+
+        # File type label
+        font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
+        self.create_text(
+            w // 2, 85,
+            text=self.file_type,
+            font=(font_family, 16, "bold"),
+            fill=self.text_primary
+        )
+
+        # Hint text
+        self.create_text(
+            w // 2, 105,
+            text=self.hint,
+            font=(font_family, 11),
+            fill=self.text_secondary
+        )
+
+        # Filename if uploaded
+        if self.is_uploaded and self.filename:
+            display_name = self.filename
+            if len(display_name) > 25:
+                display_name = display_name[:22] + "..."
+            self.create_text(
+                w // 2, 130,
+                text=display_name,
+                font=(font_family, 11, "bold"),
+                fill=self.text_success
+            )
+
+    def _draw_rounded_rect(self, x1, y1, x2, y2, radius, color, dash):
+        """Draw a rounded rectangle with optional dash pattern."""
+        # Top line
+        self.create_line(x1 + radius, y1, x2 - radius, y1, fill=color, width=2, dash=dash)
+        # Right line
+        self.create_line(x2, y1 + radius, x2, y2 - radius, fill=color, width=2, dash=dash)
+        # Bottom line
+        self.create_line(x2 - radius, y2, x1 + radius, y2, fill=color, width=2, dash=dash)
+        # Left line
+        self.create_line(x1, y2 - radius, x1, y1 + radius, fill=color, width=2, dash=dash)
+
+        # Corners (arcs)
+        self.create_arc(x1, y1, x1 + 2*radius, y1 + 2*radius, start=90, extent=90,
+                       style=tk.ARC, outline=color, width=2)
+        self.create_arc(x2 - 2*radius, y1, x2, y1 + 2*radius, start=0, extent=90,
+                       style=tk.ARC, outline=color, width=2)
+        self.create_arc(x2 - 2*radius, y2 - 2*radius, x2, y2, start=270, extent=90,
+                       style=tk.ARC, outline=color, width=2)
+        self.create_arc(x1, y2 - 2*radius, x1 + 2*radius, y2, start=180, extent=90,
+                       style=tk.ARC, outline=color, width=2)
+
+
+class ModernButton(tk.Canvas):
+    """A modern button widget with disabled/active states matching macOS design."""
+
+    def __init__(self, parent, text, on_click, **kwargs):
+        super().__init__(parent, **kwargs)
+
+        self.text = text
+        self.on_click = on_click
+        self.is_active = False
+        self.is_hovered = False
+
+        # Colors from design mockup
+        self.bg_disabled = "#E8E8ED"
+        self.bg_active = "#0071E3"
+        self.bg_hover = "#0077ED"
+        self.text_disabled = "#86868B"
+        self.text_active = "#FFFFFF"
+
+        self.configure(
+            width=540,
+            height=52,
+            highlightthickness=0,
+            cursor="hand2"
+        )
+
+        self.bind("<Button-1>", self._on_click)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+
+        self.draw()
+
+    def _on_click(self, event):
+        if self.is_active:
+            self.on_click()
+
+    def _on_enter(self, event):
+        self.is_hovered = True
+        self.draw()
+
+    def _on_leave(self, event):
+        self.is_hovered = False
+        self.draw()
+
+    def set_active(self, active):
+        self.is_active = active
+        self.configure(cursor="hand2" if active else "arrow")
+        self.draw()
+
+    def set_text(self, text):
+        self.text = text
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+
+        w = self.winfo_reqwidth()
+        h = self.winfo_reqheight()
+
+        # Background color
+        if not self.is_active:
+            bg_color = self.bg_disabled
+            text_color = self.text_disabled
+        elif self.is_hovered:
+            bg_color = self.bg_hover
+            text_color = self.text_active
+        else:
+            bg_color = self.bg_active
+            text_color = self.text_active
+
+        # Draw rounded rectangle
+        radius = 10
+        self._draw_rounded_rect_filled(0, 0, w, h, radius, bg_color)
+
+        # Draw download icon
+        icon_x = w // 2 - 70
+        icon_y = h // 2
+
+        # Arrow down
+        self.create_line(icon_x, icon_y - 8, icon_x, icon_y + 4,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+        self.create_line(icon_x - 5, icon_y, icon_x, icon_y + 4,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+        self.create_line(icon_x + 5, icon_y, icon_x, icon_y + 4,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+        # Tray
+        self.create_line(icon_x - 8, icon_y + 10, icon_x - 8, icon_y + 6,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+        self.create_line(icon_x - 8, icon_y + 10, icon_x + 8, icon_y + 10,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+        self.create_line(icon_x + 8, icon_y + 10, icon_x + 8, icon_y + 6,
+                        fill=text_color, width=2, capstyle=tk.ROUND)
+
+        # Text
+        font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
+        self.create_text(
+            w // 2 + 10, h // 2,
+            text=self.text,
+            font=(font_family, 15, "bold"),
+            fill=text_color
+        )
+
+    def _draw_rounded_rect_filled(self, x1, y1, x2, y2, radius, color):
+        """Draw a filled rounded rectangle."""
+        # Main rectangles
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=color, outline=color)
+        self.create_rectangle(x1, y1 + radius, x2, y2 - radius, fill=color, outline=color)
+
+        # Corner circles
+        self.create_oval(x1, y1, x1 + 2*radius, y1 + 2*radius, fill=color, outline=color)
+        self.create_oval(x2 - 2*radius, y1, x2, y1 + 2*radius, fill=color, outline=color)
+        self.create_oval(x2 - 2*radius, y2 - 2*radius, x2, y2, fill=color, outline=color)
+        self.create_oval(x1, y2 - 2*radius, x1 + 2*radius, y2, fill=color, outline=color)
+
 
 class ConflictFlaggerApp:
+    """Main application with modern macOS-style UI."""
+
     def __init__(self, root):
         self.root = root
-        self.root.title("Conflict Flagger AEC - Generador Excel")
-        self.root.geometry("650x550")
+        self.root.title("IFC + BC3 Converter")
+        self.root.geometry("680x520")
+        self.root.resizable(False, False)
 
+        # Colors from design mockup
+        self.bg_color = "#F5F5F7"
+        self.card_color = "#FFFFFF"
+        self.titlebar_color = "#FAFAFA"
+        self.border_color = "#E5E5E5"
+        self.text_primary = "#1D1D1F"
+        self.text_secondary = "#86868B"
+        self.accent_green = "#34C759"
+        self.accent_blue = "#0071E3"
+
+        # File paths
         self.path_ifc = tk.StringVar()
         self.path_bc3 = tk.StringVar()
 
-        # --- UI SETUP ---
-        frame_main = tk.Frame(root, padx=10, pady=10)
-        frame_main.pack(fill="both", expand=True)
+        # Configure root background
+        self.root.configure(bg=self.bg_color)
 
-        # Inputs
-        self._make_file_input(frame_main, "Arxiu Model (IFC)", self.path_ifc, self.load_ifc)
-        self._make_file_input(frame_main, "Arxiu Pressupost (BC3)", self.path_bc3, self.load_bc3)
+        self._build_ui()
 
-        # Botó
-        tk.Button(frame_main, text="GENERAR EXCEL AMB COLORS", 
-                  bg="#217346", fg="white", font=("Segoe UI", 11, "bold"),
-                  command=self.generate_excel_report, pady=10).pack(fill="x", pady=15)
+    def _build_ui(self):
+        """Build the main user interface."""
+        # Main container (white card)
+        self.main_frame = tk.Frame(self.root, bg=self.card_color)
+        self.main_frame.place(relx=0.5, rely=0.5, anchor="center", width=640, height=480)
 
-        # Log
-        self.log_area = scrolledtext.ScrolledText(frame_main, height=15)
-        self.log_area.pack(fill="both", expand=True)
+        # Add subtle shadow effect using multiple frames (simulated)
+        shadow_frame = tk.Frame(self.root, bg="#E0E0E0")
+        shadow_frame.place(relx=0.5, rely=0.5, anchor="center", width=644, height=484)
+        shadow_frame.lower()
 
-    def _make_file_input(self, parent, label, var, cmd):
-        frame = tk.LabelFrame(parent, text=label, padx=5, pady=5)
-        frame.pack(fill="x", pady=5)
-        tk.Entry(frame, textvariable=var).pack(side="left", fill="x", expand=True, padx=5)
-        tk.Button(frame, text="Buscar...", command=cmd).pack(side="left")
+        self.main_frame.lift()
 
-    def log(self, msg):
-        self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
-        self.log_area.see(tk.END)
+        # macOS-style titlebar
+        self._build_titlebar()
+
+        # Content area
+        self._build_content()
+
+    def _build_titlebar(self):
+        """Build the macOS-style titlebar with window control dots."""
+        titlebar = tk.Frame(self.main_frame, bg=self.titlebar_color, height=44)
+        titlebar.pack(fill="x")
+        titlebar.pack_propagate(False)
+
+        # Window control dots
+        dots_frame = tk.Frame(titlebar, bg=self.titlebar_color)
+        dots_frame.pack(side="left", padx=16, pady=14)
+
+        # Red dot (close)
+        red_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
+        red_dot.pack(side="left", padx=3)
+        red_dot.create_oval(0, 0, 12, 12, fill="#FF5F57", outline="")
+
+        # Yellow dot (minimize)
+        yellow_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
+        yellow_dot.pack(side="left", padx=3)
+        yellow_dot.create_oval(0, 0, 12, 12, fill="#FFBD2E", outline="")
+
+        # Green dot (maximize)
+        green_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
+        green_dot.pack(side="left", padx=3)
+        green_dot.create_oval(0, 0, 12, 12, fill="#28CA41", outline="")
+
+        # Title text (centered)
+        font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
+        title_label = tk.Label(
+            titlebar,
+            text="IFC <-> BC3 Converter",
+            font=(font_family, 13),
+            bg=self.titlebar_color,
+            fg="#666666"
+        )
+        title_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Border line at bottom of titlebar
+        border = tk.Frame(self.main_frame, bg=self.border_color, height=1)
+        border.pack(fill="x")
+
+    def _build_content(self):
+        """Build the main content area with upload zones and button."""
+        content = tk.Frame(self.main_frame, bg=self.card_color)
+        content.pack(fill="both", expand=True, padx=40, pady=35)
+
+        font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
+
+        # Header
+        header_frame = tk.Frame(content, bg=self.card_color)
+        header_frame.pack(fill="x", pady=(0, 30))
+
+        title_label = tk.Label(
+            header_frame,
+            text="Generate Excel Report",
+            font=(font_family, 24, "bold"),
+            bg=self.card_color,
+            fg=self.text_primary
+        )
+        title_label.pack()
+
+        self.subtitle_label = tk.Label(
+            header_frame,
+            text="Drop your IFC model and BC3 budget file",
+            font=(font_family, 14),
+            bg=self.card_color,
+            fg=self.text_secondary
+        )
+        self.subtitle_label.pack(pady=(8, 0))
+
+        # Upload zones container
+        zones_frame = tk.Frame(content, bg=self.card_color)
+        zones_frame.pack(fill="x", pady=(0, 24))
+
+        # IFC upload zone
+        self.ifc_zone = ModernUploadZone(
+            zones_frame,
+            file_type=".IFC",
+            hint="BIM Model",
+            on_click=self.load_ifc,
+            bg="#FAFAFA"
+        )
+        self.ifc_zone.pack(side="left", padx=(10, 10))
+
+        # BC3 upload zone
+        self.bc3_zone = ModernUploadZone(
+            zones_frame,
+            file_type=".BC3",
+            hint="Budget File",
+            on_click=self.load_bc3,
+            bg="#FAFAFA"
+        )
+        self.bc3_zone.pack(side="right", padx=(10, 10))
+
+        # Arrow divider
+        arrow_frame = tk.Frame(content, bg=self.card_color, height=40)
+        arrow_frame.pack(fill="x", pady=(0, 24))
+
+        arrow_canvas = tk.Canvas(arrow_frame, width=24, height=24, bg=self.card_color, highlightthickness=0)
+        arrow_canvas.pack()
+
+        # Draw arrow pointing down
+        self.arrow_canvas = arrow_canvas
+        self._draw_arrow()
+
+        # Download button
+        self.download_btn = ModernButton(
+            content,
+            text="Download Excel",
+            on_click=self.generate_excel_report,
+            bg=self.card_color
+        )
+        self.download_btn.pack()
+
+        # Status label
+        self.status_label = tk.Label(
+            content,
+            text="",
+            font=(font_family, 12),
+            bg=self.card_color,
+            fg=self.text_secondary
+        )
+        self.status_label.pack(pady=(15, 0))
+
+    def _draw_arrow(self, active=False):
+        """Draw the arrow divider, green when both files are selected."""
+        self.arrow_canvas.delete("all")
+        color = self.accent_green if active else "#D2D2D7"
+
+        # Arrow pointing down
+        self.arrow_canvas.create_line(12, 3, 12, 18, fill=color, width=1.5, capstyle=tk.ROUND)
+        self.arrow_canvas.create_line(5, 12, 12, 18, fill=color, width=1.5, capstyle=tk.ROUND)
+        self.arrow_canvas.create_line(19, 12, 12, 18, fill=color, width=1.5, capstyle=tk.ROUND)
+
+    def _update_button_state(self):
+        """Update button state and subtitle based on file selection."""
+        ifc_ready = bool(self.path_ifc.get())
+        bc3_ready = bool(self.path_bc3.get())
+        both_ready = ifc_ready and bc3_ready
+
+        self.download_btn.set_active(both_ready)
+        self._draw_arrow(both_ready)
+
+        if both_ready:
+            self.subtitle_label.config(text="Both files uploaded - ready to generate")
+        elif ifc_ready:
+            self.subtitle_label.config(text="IFC loaded - now select BC3 file")
+        elif bc3_ready:
+            self.subtitle_label.config(text="BC3 loaded - now select IFC file")
+        else:
+            self.subtitle_label.config(text="Drop your IFC model and BC3 budget file")
+
+    def _set_status(self, msg):
+        """Update the status label."""
+        self.status_label.config(text=msg)
         self.root.update()
 
     def load_ifc(self):
-        f = filedialog.askopenfilename(filetypes=[("IFC Files", "*.ifc")])
-        if f: self.path_ifc.set(f)
+        """Open file dialog to select IFC file."""
+        f = filedialog.askopenfilename(
+            title="Select IFC File",
+            filetypes=[("IFC Files", "*.ifc"), ("All Files", "*.*")]
+        )
+        if f:
+            self.path_ifc.set(f)
+            filename = os.path.basename(f)
+            self.ifc_zone.set_uploaded(filename)
+            self._update_button_state()
 
     def load_bc3(self):
-        f = filedialog.askopenfilename(filetypes=[("BC3 Files", "*.bc3")])
-        if f: self.path_bc3.set(f)
+        """Open file dialog to select BC3 file."""
+        f = filedialog.askopenfilename(
+            title="Select BC3 File",
+            filetypes=[("BC3 Files", "*.bc3"), ("All Files", "*.*")]
+        )
+        if f:
+            self.path_bc3.set(f)
+            filename = os.path.basename(f)
+            self.bc3_zone.set_uploaded(filename)
+            self._update_button_state()
 
-    # --- LÒGICA DE PARSEIG ---
-
-    def get_bc3_codes(self, filepath):
-        """Llegeix els codis (~C) del fitxer BC3"""
-        codes = {} # Diccionari {codi: descripcio}
-        try:
-            with open(filepath, 'r', encoding='latin1') as f:
-                for line in f:
-                    if line.startswith('~C|'):
-                        parts = line.split('|')
-                        if len(parts) > 1:
-                            c = parts[1].replace('\\', '').strip()
-                            # Intentem agafar la descripció si existeix (sol ser el camp 3 o 4)
-                            desc = parts[2] if len(parts) > 2 else "Sense descripció"
-                            if c: codes[c] = desc
-            return codes
-        except Exception as e:
-            self.log(f"Error llegint BC3: {e}")
-            return {}
-
-    def get_ifc_data(self, filepath):
-        """Busca codis dins les propietats de l'IFC"""
-        found_codes = set()
-        elements_map = [] # Llista de tuples (NomElement, CodiTrobat, TipusIFC)
-        
-        try:
-            ifc = ifcopenshell.open(filepath)
-            # Busquem elements físics comuns
-            products = ifc.by_type("IfcElement")
-            
-            total = len(products)
-            self.log(f"Analitzant {total} elements a l'IFC...")
-
-            for i, product in enumerate(products):
-                if i % 50 == 0: self.root.update() # Refresc UI
-
-                # 1. Obtenir totes les propietats de l'element com un diccionari
-                # Això busca a Psets, Type Objects, etc.
-                props = ifcopenshell.util.element.get_psets(product)
-                
-                # Busquem valors que semblin codis dins de totes les propietats
-                found_match = None
-                
-                # Aplanem el diccionari de propietats per buscar valors
-                all_values = []
-                for pset_name, properties in props.items():
-                    all_values.extend(properties.values())
-                
-                # Afegim també el nom i Tag per si de cas
-                if product.Name: all_values.append(product.Name)
-                if product.Tag: all_values.append(product.Tag)
-
-                # Guardem informació per l'informe
-                # Aquí la clau: Retornem TOTS els valors per comparar-los després amb el BC3
-                # O per optimitzar: Si coincideix amb algun codi BC3 conegut (ho farem al pas de creuament)
-                
-                elements_map.append({
-                    "name": product.Name,
-                    "type": product.is_a(),
-                    "properties": [str(v).strip() for v in all_values if v]
-                })
-
-            return elements_map
-
-        except Exception as e:
-            self.log(f"Error llegint IFC: {e}")
-            return []
-
-    # --- GENERACIÓ EXCEL ---
+    # --- EXCEL GENERATION ---
 
     def generate_excel_report(self):
+        """Generate the Excel comparison report using the backend pipeline."""
         if not self.path_ifc.get() or not self.path_bc3.get():
-            messagebox.showwarning("Atenció", "Selecciona els arxius.")
+            messagebox.showwarning("Warning", "Please select both files.")
             return
 
-        self.log("Iniciant anàlisi profunda...")
-        
-        # 1. Carregar dades
-        bc3_data = self.get_bc3_codes(self.path_bc3.get()) # Dict {code: desc}
-        bc3_codes_set = set(bc3_data.keys())
-        self.log(f"BC3: {len(bc3_codes_set)} partides carregades.")
+        self._set_status("Starting analysis...")
+        self.download_btn.set_text("Processing...")
+        self.download_btn.set_active(False)
 
-        ifc_elements = self.get_ifc_data(self.path_ifc.get())
-        self.log(f"IFC: {len(ifc_elements)} elements processats.")
-
-        # 2. Creuar dades (MATCHING)
-        matches = []
-        errors_ifc = [] # A l'IFC però no al BC3 (si té algun codi potencial)
-        
-        # Elements trobats a l'IFC que coincideixen amb BC3
-        found_in_ifc_codes = set()
-
-        for el in ifc_elements:
-            # Busquem si algun valor de les propietats de l'element coincideix amb un codi BC3
-            # Intersecció entre els valors de l'element i les claus del BC3
-            element_values_set = set(el['properties'])
-            intersection = element_values_set.intersection(bc3_codes_set)
-            
-            if intersection:
-                code = list(intersection)[0] # Agafem el primer match
-                matches.append([el['name'], code, bc3_data[code], "CORRECTE"])
-                found_in_ifc_codes.add(code)
-            else:
-                # Si no trobem match, ho marquem com error (o element sense partida)
-                errors_ifc.append([el['name'], "Cap codi trobat", "-", "ERROR: NO MATCH"])
-
-        # Identificar partides del BC3 que no estan al model
-        missing_in_model = bc3_codes_set - found_in_ifc_codes
-        
-        # 3. Crear Excel
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Informe Comparatiu"
-
-        # Estils
-        fill_red = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
-        fill_green = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
-        fill_yellow = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-        bold_font = Font(bold=True)
-
-        # Capçaleres
-        headers = ["Element Model (IFC)", "Codi Partida", "Descripció BC3", "Estat"]
-        ws.append(headers)
-        for cell in ws[1]: cell.font = bold_font
-
-        # Escriure Matches (Verd)
-        for row in matches:
-            ws.append(row)
-            ws[f"D{ws.max_row}"].fill = fill_green
-
-        # Escriure Errors IFC (Vermell)
-        # Limitem a 100 errors per no saturar si tot està malament
-        for row in errors_ifc[:100]: 
-            ws.append(row)
-            ws[f"D{ws.max_row}"].fill = fill_red
-        
-        if len(errors_ifc) > 100:
-            ws.append(["... i molts més elements sense codi ...", "", "", ""])
-
-        # Escriure Missing BC3 (Groc)
-        ws.append(["", "", "", ""])
-        ws.append(["PARTIDES AL PRESSUPOST (BC3) NO TROBADES AL MODEL", "", "", ""])
-        ws[f"A{ws.max_row}"].font = bold_font
-        
-        for code in missing_in_model:
-            ws.append(["NO MODELAT", code, bc3_data[code], "AVÍS: FALTEN AL MODEL"])
-            ws[f"D{ws.max_row}"].fill = fill_yellow
-
-        # Ajustar columnes
-        ws.column_dimensions['A'].width = 40
-        ws.column_dimensions['B'].width = 20
-        ws.column_dimensions['C'].width = 50
-        ws.column_dimensions['D'].width = 20
-
-        # Guardar
-        filename = f"Informe_AEC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         try:
-            wb.save(filename)
-            self.log(f"Excel guardat: {filename}")
-            messagebox.showinfo("Èxit", f"Informe generat!\n\nMatches: {len(matches)}\nErrors IFC: {len(errors_ifc)}\nFalten al Model: {len(missing_in_model)}")
-            os.startfile(filename)
-        except Exception as e:
-            messagebox.showerror("Error", f"No s'ha pogut guardar l'Excel: {e}")
+            # Get the project root directory for output path
+            project_root = Path(__file__).parent.parent
+            output_dir = project_root / "data" / "output"
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-if __name__ == "__main__":
+            # 1. Parse IFC file using IFCParser
+            self._set_status("Analyzing IFC file...")
+            self.root.update()
+            ifc_parser = IFCParser()
+            ifc_result = ifc_parser.parse(self.path_ifc.get())
+            self._set_status(f"IFC: {len(ifc_result.types)} types, {len(ifc_result.elements)} elements")
+            self.root.update()
+
+            # 2. Parse BC3 file using BC3Parser
+            self._set_status("Analyzing BC3 file...")
+            self.root.update()
+            bc3_parser = BC3Parser()
+            bc3_result = bc3_parser.parse(self.path_bc3.get())
+            self._set_status(f"BC3: {len(bc3_result.elements)} items loaded")
+            self.root.update()
+
+            # 3. Match elements using Matcher
+            self._set_status("Matching IFC elements with BC3 items...")
+            self.root.update()
+            matcher = Matcher(match_by_name=True)
+            match_result = matcher.match(ifc_result, bc3_result)
+            self._set_status(f"Matched: {len(match_result.matched)}")
+            self.root.update()
+
+            # 4. Compare matched elements using Comparator
+            self._set_status("Comparing properties...")
+            self.root.update()
+            comparator = Comparator(tolerance=0.01)
+            comparison_result = comparator.compare(match_result)
+            summary = comparison_result.summary()
+            self._set_status(f"Conflicts: {summary['total_conflicts']}")
+            self.root.update()
+
+            # 5. Generate report using Reporter
+            self._set_status("Generating Excel report...")
+            self.root.update()
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_path = output_dir / f"Report_AEC_{timestamp}.xlsx"
+
+            reporter = Reporter()
+            report_path = reporter.generate_report(
+                match_result,
+                comparison_result,
+                output_path
+            )
+
+            self._set_status(f"Report saved successfully")
+
+            # Show success message with summary
+            messagebox.showinfo(
+                "Success",
+                f"Report generated successfully!\n\n"
+                f"Matched: {len(match_result.matched)}\n"
+                f"IFC only (not budgeted): {len(match_result.ifc_only)}\n"
+                f"BC3 only (not modeled): {len(match_result.bc3_only)}\n\n"
+                f"Conflicts: {summary['total_conflicts']}\n"
+                f"  - Errors: {summary['errors']}\n"
+                f"  - Warnings: {summary['warnings']}\n\n"
+                f"File: {report_path}"
+            )
+
+            # Try to open the file (cross-platform)
+            try:
+                if sys.platform == "darwin":
+                    subprocess.run(['open', str(report_path)], check=False)
+                elif sys.platform == "win32":
+                    os.startfile(str(report_path))
+                else:
+                    subprocess.run(['xdg-open', str(report_path)], check=False)
+            except Exception as open_error:
+                self._set_status(f"Could not open file automatically")
+
+        except FileNotFoundError as e:
+            self._set_status(f"Error: File not found")
+            messagebox.showerror("Error", f"File not found:\n{e}")
+        except Exception as e:
+            self._set_status(f"Error during analysis")
+            messagebox.showerror("Error", f"Could not complete analysis:\n{e}")
+        finally:
+            # Restore button state
+            self.download_btn.set_text("Download Excel")
+            self._update_button_state()
+
+
+def main():
+    """Main entry point for the application."""
     root = tk.Tk()
     app = ConflictFlaggerApp(root)
     root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
