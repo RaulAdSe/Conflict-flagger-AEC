@@ -6,6 +6,13 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Try to import tkinterdnd2 for drag & drop support
+try:
+    from tkinterdnd2 import TkinterDnD, DND_FILES
+    HAS_DND = True
+except ImportError:
+    HAS_DND = False
+
 # Handle imports for both development and standalone builds
 try:
     # Development mode (running from source)
@@ -26,20 +33,24 @@ except ImportError:
 class ModernUploadZone(tk.Canvas):
     """A modern upload zone widget with dashed/solid border states matching macOS design."""
 
-    def __init__(self, parent, file_type, hint, on_click, **kwargs):
+    def __init__(self, parent, file_type, hint, on_click, on_drop=None, **kwargs):
         super().__init__(parent, **kwargs)
 
-        self.file_type = file_type
+        self.file_type = file_type  # ".IFC" or ".BC3"
         self.hint = hint
         self.on_click = on_click
+        self.on_drop = on_drop  # Callback for when file is dropped
         self.is_uploaded = False
         self.filename = ""
+        self.is_drag_over = False
 
         # Colors from design mockup
         self.bg_empty = "#FAFAFA"
         self.bg_uploaded = "#F0FFF4"
+        self.bg_drag_over = "#E8F4FF"  # Light blue when dragging over
         self.border_empty = "#D2D2D7"
         self.border_uploaded = "#34C759"
+        self.border_drag_over = "#0071E3"  # Blue when dragging over
         self.icon_bg_empty = "#E8E8ED"
         self.icon_bg_uploaded = "#D1FAE5"
         self.text_primary = "#1D1D1F"
@@ -58,17 +69,84 @@ class ModernUploadZone(tk.Canvas):
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
 
+        # Register as drop target if tkinterdnd2 is available
+        if HAS_DND:
+            self.drop_target_register(DND_FILES)
+            self.dnd_bind('<<DropEnter>>', self._on_drag_enter)
+            self.dnd_bind('<<DropLeave>>', self._on_drag_leave)
+            self.dnd_bind('<<Drop>>', self._on_drop)
+
         self.draw()
 
     def _on_enter(self, event):
-        if not self.is_uploaded:
+        if not self.is_uploaded and not self.is_drag_over:
             self.configure(bg="#F5F8FF")
             self.draw()
 
     def _on_leave(self, event):
-        if not self.is_uploaded:
+        if not self.is_uploaded and not self.is_drag_over:
             self.configure(bg=self.bg_empty)
             self.draw()
+
+    def _on_drag_enter(self, event):
+        """Handle drag enter event."""
+        self.is_drag_over = True
+        self.configure(bg=self.bg_drag_over)
+        self.draw()
+        return event.action
+
+    def _on_drag_leave(self, event):
+        """Handle drag leave event."""
+        self.is_drag_over = False
+        if self.is_uploaded:
+            self.configure(bg=self.bg_uploaded)
+        else:
+            self.configure(bg=self.bg_empty)
+        self.draw()
+
+    def _on_drop(self, event):
+        """Handle file drop event."""
+        self.is_drag_over = False
+
+        # Parse the dropped file path(s)
+        # tkinterdnd2 returns paths with curly braces if they contain spaces
+        file_path = event.data.strip()
+        if file_path.startswith('{') and file_path.endswith('}'):
+            file_path = file_path[1:-1]
+
+        # Handle multiple files - just take the first one
+        if ' ' in file_path and not os.path.exists(file_path):
+            # Try to find the first valid file path
+            parts = file_path.split()
+            for part in parts:
+                clean_part = part.strip('{}')
+                if os.path.exists(clean_part):
+                    file_path = clean_part
+                    break
+
+        # Check if file extension matches
+        expected_ext = self.file_type.lower()  # ".ifc" or ".bc3"
+        actual_ext = os.path.splitext(file_path)[1].lower()
+
+        if actual_ext == expected_ext:
+            # Valid file - call the drop callback
+            if self.on_drop:
+                self.on_drop(file_path)
+        else:
+            # Wrong file type - show error briefly
+            self.configure(bg="#FFE5E5")  # Light red
+            self.draw()
+            self.after(500, lambda: self._reset_bg())
+
+        return event.action
+
+    def _reset_bg(self):
+        """Reset background after invalid drop."""
+        if self.is_uploaded:
+            self.configure(bg=self.bg_uploaded)
+        else:
+            self.configure(bg=self.bg_empty)
+        self.draw()
 
     def set_uploaded(self, filename):
         self.is_uploaded = True
@@ -89,8 +167,15 @@ class ModernUploadZone(tk.Canvas):
         h = self.winfo_reqheight()
 
         # Draw rounded rectangle border
-        border_color = self.border_uploaded if self.is_uploaded else self.border_empty
-        dash_pattern = () if self.is_uploaded else (8, 4)
+        if self.is_drag_over:
+            border_color = self.border_drag_over
+            dash_pattern = ()  # Solid when dragging
+        elif self.is_uploaded:
+            border_color = self.border_uploaded
+            dash_pattern = ()
+        else:
+            border_color = self.border_empty
+            dash_pattern = (8, 4)
 
         # Draw rounded rectangle
         radius = 12
@@ -308,8 +393,8 @@ class ConflictFlaggerApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("IFC + BC3 Converter")
-        self.root.geometry("680x520")
+        self.root.title("Flagger")
+        self.root.geometry("640x450")
         self.root.resizable(False, False)
 
         # Colors from design mockup
@@ -333,77 +418,27 @@ class ConflictFlaggerApp:
 
     def _build_ui(self):
         """Build the main user interface."""
-        # Main container (white card)
+        # Main container - use the full window, OS provides titlebar
         self.main_frame = tk.Frame(self.root, bg=self.card_color)
-        self.main_frame.place(relx=0.5, rely=0.5, anchor="center", width=640, height=480)
+        self.main_frame.pack(fill="both", expand=True)
 
-        # Add subtle shadow effect using multiple frames (simulated)
-        shadow_frame = tk.Frame(self.root, bg="#E0E0E0")
-        shadow_frame.place(relx=0.5, rely=0.5, anchor="center", width=644, height=484)
-        shadow_frame.lower()
-
-        self.main_frame.lift()
-
-        # macOS-style titlebar
-        self._build_titlebar()
-
-        # Content area
+        # Content area (no custom titlebar - OS provides it)
         self._build_content()
-
-    def _build_titlebar(self):
-        """Build the macOS-style titlebar with window control dots."""
-        titlebar = tk.Frame(self.main_frame, bg=self.titlebar_color, height=44)
-        titlebar.pack(fill="x")
-        titlebar.pack_propagate(False)
-
-        # Window control dots
-        dots_frame = tk.Frame(titlebar, bg=self.titlebar_color)
-        dots_frame.pack(side="left", padx=16, pady=14)
-
-        # Red dot (close)
-        red_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
-        red_dot.pack(side="left", padx=3)
-        red_dot.create_oval(0, 0, 12, 12, fill="#FF5F57", outline="")
-
-        # Yellow dot (minimize)
-        yellow_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
-        yellow_dot.pack(side="left", padx=3)
-        yellow_dot.create_oval(0, 0, 12, 12, fill="#FFBD2E", outline="")
-
-        # Green dot (maximize)
-        green_dot = tk.Canvas(dots_frame, width=12, height=12, bg=self.titlebar_color, highlightthickness=0)
-        green_dot.pack(side="left", padx=3)
-        green_dot.create_oval(0, 0, 12, 12, fill="#28CA41", outline="")
-
-        # Title text (centered)
-        font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
-        title_label = tk.Label(
-            titlebar,
-            text="IFC <-> BC3 Converter",
-            font=(font_family, 13),
-            bg=self.titlebar_color,
-            fg="#666666"
-        )
-        title_label.place(relx=0.5, rely=0.5, anchor="center")
-
-        # Border line at bottom of titlebar
-        border = tk.Frame(self.main_frame, bg=self.border_color, height=1)
-        border.pack(fill="x")
 
     def _build_content(self):
         """Build the main content area with upload zones and button."""
         content = tk.Frame(self.main_frame, bg=self.card_color)
-        content.pack(fill="both", expand=True, padx=40, pady=35)
+        content.pack(fill="both", expand=True, padx=40, pady=20)
 
         font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
 
         # Header
         header_frame = tk.Frame(content, bg=self.card_color)
-        header_frame.pack(fill="x", pady=(0, 30))
+        header_frame.pack(fill="x", pady=(0, 20))
 
         title_label = tk.Label(
             header_frame,
-            text="Generate Excel Report",
+            text="Genera Informe Excel",
             font=(font_family, 24, "bold"),
             bg=self.card_color,
             fg=self.text_primary
@@ -412,7 +447,7 @@ class ConflictFlaggerApp:
 
         self.subtitle_label = tk.Label(
             header_frame,
-            text="Drop your IFC model and BC3 budget file",
+            text="Selecciona el model IFC i el pressupost BC3",
             font=(font_family, 14),
             bg=self.card_color,
             fg=self.text_secondary
@@ -427,8 +462,9 @@ class ConflictFlaggerApp:
         self.ifc_zone = ModernUploadZone(
             zones_frame,
             file_type=".IFC",
-            hint="BIM Model",
+            hint="Model BIM",
             on_click=self.load_ifc,
+            on_drop=self._on_ifc_drop,
             bg="#FAFAFA"
         )
         self.ifc_zone.pack(side="left", padx=(10, 10))
@@ -437,8 +473,9 @@ class ConflictFlaggerApp:
         self.bc3_zone = ModernUploadZone(
             zones_frame,
             file_type=".BC3",
-            hint="Budget File",
+            hint="Pressupost",
             on_click=self.load_bc3,
+            on_drop=self._on_bc3_drop,
             bg="#FAFAFA"
         )
         self.bc3_zone.pack(side="right", padx=(10, 10))
@@ -457,7 +494,7 @@ class ConflictFlaggerApp:
         # Download button
         self.download_btn = ModernButton(
             content,
-            text="Download Excel",
+            text="Descarrega Excel",
             on_click=self.generate_excel_report,
             bg=self.card_color
         )
@@ -493,13 +530,13 @@ class ConflictFlaggerApp:
         self._draw_arrow(both_ready)
 
         if both_ready:
-            self.subtitle_label.config(text="Both files uploaded - ready to generate")
+            self.subtitle_label.config(text="Fitxers carregats - preparat per generar")
         elif ifc_ready:
-            self.subtitle_label.config(text="IFC loaded - now select BC3 file")
+            self.subtitle_label.config(text="IFC carregat - selecciona el fitxer BC3")
         elif bc3_ready:
-            self.subtitle_label.config(text="BC3 loaded - now select IFC file")
+            self.subtitle_label.config(text="BC3 carregat - selecciona el fitxer IFC")
         else:
-            self.subtitle_label.config(text="Drop your IFC model and BC3 budget file")
+            self.subtitle_label.config(text="Selecciona el model IFC i el pressupost BC3")
 
     def _set_status(self, msg):
         """Update the status label."""
@@ -530,7 +567,60 @@ class ConflictFlaggerApp:
             self.bc3_zone.set_uploaded(filename)
             self._update_button_state()
 
+    def _on_ifc_drop(self, file_path):
+        """Handle IFC file drop."""
+        self.path_ifc.set(file_path)
+        filename = os.path.basename(file_path)
+        self.ifc_zone.set_uploaded(filename)
+        self._update_button_state()
+
+    def _on_bc3_drop(self, file_path):
+        """Handle BC3 file drop."""
+        self.path_bc3.set(file_path)
+        filename = os.path.basename(file_path)
+        self.bc3_zone.set_uploaded(filename)
+        self._update_button_state()
+
     # --- EXCEL GENERATION ---
+
+    def _get_output_directory(self):
+        """
+        Determine the best output directory for the report.
+
+        Priority:
+        1. Same directory as the IFC file (user's working directory)
+        2. User's Documents folder (fallback)
+        3. User's Desktop (last resort fallback)
+
+        This ensures output is always in a user-accessible location,
+        whether running in development or as a built .app/.exe.
+        """
+        # Try to use the IFC file's directory (most intuitive for users)
+        if self.path_ifc.get():
+            ifc_dir = Path(self.path_ifc.get()).parent
+            if ifc_dir.exists() and os.access(str(ifc_dir), os.W_OK):
+                return ifc_dir
+
+        # Fallback to user's Documents folder
+        if sys.platform == "darwin":
+            documents = Path.home() / "Documents"
+        elif sys.platform == "win32":
+            # On Windows, use the standard Documents folder
+            documents = Path.home() / "Documents"
+        else:
+            # Linux
+            documents = Path.home() / "Documents"
+
+        if documents.exists() and os.access(str(documents), os.W_OK):
+            return documents
+
+        # Last resort: Desktop
+        desktop = Path.home() / "Desktop"
+        if desktop.exists() and os.access(str(desktop), os.W_OK):
+            return desktop
+
+        # Ultimate fallback: home directory
+        return Path.home()
 
     def generate_excel_report(self):
         """Generate the Excel comparison report using the backend pipeline."""
@@ -543,10 +633,8 @@ class ConflictFlaggerApp:
         self.download_btn.set_active(False)
 
         try:
-            # Get the project root directory for output path
-            project_root = Path(__file__).parent.parent
-            output_dir = project_root / "data" / "output"
-            output_dir.mkdir(parents=True, exist_ok=True)
+            # Get a user-accessible output directory (works in both dev and built app)
+            output_dir = self._get_output_directory()
 
             # 1. Parse IFC file using IFCParser
             self._set_status("Analyzing IFC file...")
@@ -596,17 +684,17 @@ class ConflictFlaggerApp:
 
             self._set_status(f"Report saved successfully")
 
-            # Show success message with summary
+            # Show success message with summary (in Catalan)
             messagebox.showinfo(
-                "Success",
-                f"Report generated successfully!\n\n"
-                f"Matched: {len(match_result.matched)}\n"
-                f"IFC only (not budgeted): {len(match_result.ifc_only)}\n"
-                f"BC3 only (not modeled): {len(match_result.bc3_only)}\n\n"
-                f"Conflicts: {summary['total_conflicts']}\n"
+                "Informe Generat",
+                f"L'informe s'ha generat correctament!\n\n"
+                f"Emparellats: {len(match_result.matched)} elements\n"
+                f"Nomes a IFC (sense pressupostar): {len(match_result.ifc_only)}\n"
+                f"Nomes a BC3 (sense modelar): {len(match_result.bc3_only)}\n\n"
+                f"Discrepancies trobades: {summary['total_conflicts']}\n"
                 f"  - Errors: {summary['errors']}\n"
-                f"  - Warnings: {summary['warnings']}\n\n"
-                f"File: {report_path}"
+                f"  - Avisos: {summary['warnings']}\n\n"
+                f"Fitxer guardat a: {report_path}"
             )
 
             # Try to open the file (cross-platform)
@@ -628,13 +716,17 @@ class ConflictFlaggerApp:
             messagebox.showerror("Error", f"Could not complete analysis:\n{e}")
         finally:
             # Restore button state
-            self.download_btn.set_text("Download Excel")
+            self.download_btn.set_text("Descarrega Excel")
             self._update_button_state()
 
 
 def main():
     """Main entry point for the application."""
-    root = tk.Tk()
+    # Use TkinterDnD if available for drag & drop support
+    if HAS_DND:
+        root = TkinterDnD.Tk()
+    else:
+        root = tk.Tk()
     app = ConflictFlaggerApp(root)
     root.mainloop()
 
