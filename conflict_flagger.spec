@@ -22,6 +22,7 @@ a = Analysis(
         ('src/matching', 'matching'),
         ('src/comparison', 'comparison'),
         ('src/reporting', 'reporting'),
+        ('app_design/Servitec logo.png', 'app_design'),
     ] + ifcopenshell_datas,
     hiddenimports=[
         'ifcopenshell',

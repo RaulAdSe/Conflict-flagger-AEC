@@ -6,6 +6,13 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Try to import PIL for logo display
+try:
+    from PIL import Image, ImageTk
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
 # Try to import tkinterdnd2 for drag & drop support
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
@@ -425,6 +432,23 @@ class ConflictFlaggerApp:
         # Content area (no custom titlebar - OS provides it)
         self._build_content()
 
+    def _get_logo_path(self):
+        """Get the path to the logo file, works in both dev and built app."""
+        # Try development path first
+        dev_path = Path(__file__).parent.parent / "app_design" / "Servitec logo.png"
+        if dev_path.exists():
+            return dev_path
+
+        # Try relative to executable (for built app)
+        if getattr(sys, 'frozen', False):
+            # Running as compiled
+            bundle_dir = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(sys.executable).parent
+            logo_path = bundle_dir / "app_design" / "Servitec logo.png"
+            if logo_path.exists():
+                return logo_path
+
+        return None
+
     def _build_content(self):
         """Build the main content area with upload zones and button."""
         content = tk.Frame(self.main_frame, bg=self.card_color)
@@ -432,7 +456,7 @@ class ConflictFlaggerApp:
 
         font_family = "SF Pro Display" if sys.platform == "darwin" else "Segoe UI"
 
-        # Header
+        # Header with logo
         header_frame = tk.Frame(content, bg=self.card_color)
         header_frame.pack(fill="x", pady=(0, 20))
 
@@ -453,6 +477,31 @@ class ConflictFlaggerApp:
             fg=self.text_secondary
         )
         self.subtitle_label.pack(pady=(8, 0))
+
+        # Logo (top right corner, absolute position)
+        if HAS_PIL:
+            logo_path = self._get_logo_path()
+            if logo_path:
+                try:
+                    # Load and resize logo (small)
+                    logo_img = Image.open(logo_path)
+                    logo_height = 25
+                    aspect_ratio = logo_img.width / logo_img.height
+                    logo_width = int(logo_height * aspect_ratio)
+                    logo_img = logo_img.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+
+                    # Keep reference to prevent garbage collection
+                    self.logo_photo = ImageTk.PhotoImage(logo_img)
+
+                    # Place logo in top-right of main content area
+                    logo_label = tk.Label(
+                        content,
+                        image=self.logo_photo,
+                        bg=self.card_color
+                    )
+                    logo_label.place(relx=1.0, y=0, anchor="ne")
+                except Exception as e:
+                    pass  # Silently fail if logo can't be loaded
 
         # Upload zones container
         zones_frame = tk.Frame(content, bg=self.card_color)
@@ -588,33 +637,19 @@ class ConflictFlaggerApp:
         Determine the best output directory for the report.
 
         Priority:
-        1. Same directory as the IFC file (user's working directory)
-        2. User's Documents folder (fallback)
-        3. User's Desktop (last resort fallback)
+        1. User's Downloads folder (default)
+        2. User's Desktop (fallback)
+        3. User's home directory (last resort)
 
         This ensures output is always in a user-accessible location,
         whether running in development or as a built .app/.exe.
         """
-        # Try to use the IFC file's directory (most intuitive for users)
-        if self.path_ifc.get():
-            ifc_dir = Path(self.path_ifc.get()).parent
-            if ifc_dir.exists() and os.access(str(ifc_dir), os.W_OK):
-                return ifc_dir
+        # Default to Downloads folder
+        downloads = Path.home() / "Downloads"
+        if downloads.exists() and os.access(str(downloads), os.W_OK):
+            return downloads
 
-        # Fallback to user's Documents folder
-        if sys.platform == "darwin":
-            documents = Path.home() / "Documents"
-        elif sys.platform == "win32":
-            # On Windows, use the standard Documents folder
-            documents = Path.home() / "Documents"
-        else:
-            # Linux
-            documents = Path.home() / "Documents"
-
-        if documents.exists() and os.access(str(documents), os.W_OK):
-            return documents
-
-        # Last resort: Desktop
+        # Fallback to Desktop
         desktop = Path.home() / "Desktop"
         if desktop.exists() and os.access(str(desktop), os.W_OK):
             return desktop
