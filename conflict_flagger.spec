@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
 PyInstaller spec file for Conflict Flagger AEC
-Builds cross-platform desktop application (.exe for Windows, .app for Mac)
+Builds cross-platform desktop application - single-file executables
 """
 
 import sys
@@ -31,6 +31,9 @@ a = Analysis(
         'openpyxl',
         'openpyxl.styles',
         'openpyxl.utils',
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageTk',
     ] + ifcopenshell_hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -50,70 +53,26 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Platform-specific configuration
-if sys.platform == 'darwin':
-    # macOS App Bundle
-    exe = EXE(
-        pyz,
-        a.scripts,
-        [],
-        exclude_binaries=True,
-        name='Conflict Flagger AEC',
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=True,
-        console=False,
-        disable_windowed_traceback=False,
-        argv_emulation=True,
-        target_arch=None,
-        codesign_identity=None,
-        entitlements_file=None,
-    )
-    coll = COLLECT(
-        exe,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        name='Conflict Flagger AEC',
-    )
-    app = BUNDLE(
-        coll,
-        name='Conflict Flagger AEC.app',
-        icon=None,
-        bundle_identifier='com.conflictflagger.aec',
-        info_plist={
-            'CFBundleName': 'Conflict Flagger AEC',
-            'CFBundleDisplayName': 'Conflict Flagger AEC',
-            'CFBundleVersion': '1.0.0',
-            'CFBundleShortVersionString': '1.0.0',
-            'NSHighResolutionCapable': True,
-        },
-    )
-else:
-    # Windows EXE
-    exe = EXE(
-        pyz,
-        a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        [],
-        name='ConflictFlaggerAEC',
-        debug=False,
-        bootloader_ignore_signals=False,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        runtime_tmpdir=None,
-        console=False,
-        disable_windowed_traceback=False,
-        argv_emulation=False,
-        target_arch=None,
-        codesign_identity=None,
-        entitlements_file=None,
-        icon=None,
-    )
+# Both platforms: Single-file executable (smaller, compressed)
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='ConflictFlaggerAEC' if sys.platform == 'win32' else 'Flagger',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=True if sys.platform == 'darwin' else False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,
+)

@@ -39,6 +39,22 @@ pip install -r requirements.txt
 
 ## Quick Start
 
+### Desktop Application
+
+The easiest way to use Conflict Flagger is the desktop application:
+
+1. Download the executable for your platform:
+   - **Windows**: `ConflictFlaggerAEC.exe` (~67 MB)
+   - **macOS**: `Flagger` (~134 MB)
+
+2. Launch the application and drag & drop your files:
+   - Drop `.ifc` file on the left zone
+   - Drop `.bc3` file on the right zone
+
+3. Click "Generar Excel" to generate the comparison report
+
+See [Desktop App Documentation](docs/desktop-app.md) for details.
+
 ### Command Line
 
 ```bash
@@ -128,6 +144,8 @@ See the [`docs/`](docs/) folder for detailed documentation:
 
 | Document | Description |
 |----------|-------------|
+| [Desktop App](docs/desktop-app.md) | Desktop application guide |
+| [Guia d'Usuari](docs/guia-usuari.md) | User guide (Catalan) |
 | [Architecture](docs/arquitectura.md) | System overview |
 | [BC3 Parser](docs/bc3-parser.md) | Budget extraction |
 | [IFC Parser](docs/ifc-parser.md) | BIM model extraction |
@@ -151,10 +169,13 @@ conflict-flagger-aec/
 │   │   └── comparator.py       # Discrepancy detection
 │   ├── reporting/
 │   │   └── reporter.py         # Report generation
+│   ├── app_comparator.py       # Desktop application
 │   ├── main.py                 # Main CLI
 │   └── test_data_generator.py  # Test data generator
 ├── tests/                      # Unit tests
 ├── docs/                       # Technical documentation
+├── app_design/                 # UI mockups and assets
+├── conflict_flagger.spec       # PyInstaller build config
 ├── data/
 │   ├── input/                  # Input files
 │   └── output/                 # Generated reports

@@ -1,275 +1,181 @@
-# Desktop Application (Future Plan)
+# Desktop Application
 
 ## Overview
 
-This document outlines options for packaging Conflict Flagger AEC as a desktop application for office use. Two approaches are planned for initial implementation.
+Conflict Flagger AEC includes a cross-platform desktop application with a modern, user-friendly interface. The app provides drag-and-drop functionality for file selection and generates comprehensive Excel reports comparing BIM models (IFC) with construction budgets (BC3).
 
-## Option 1: Standalone Executable (PyInstaller)
+## Features
 
-### Description
+- **Modern UI**: Clean interface matching macOS design guidelines
+- **Drag & Drop**: Drop IFC and BC3 files directly onto upload zones
+- **Cross-platform**: Native builds for Windows (.exe) and macOS
+- **Integrated Backend**: Uses the full parsing, matching, and comparison pipeline
+- **Catalan Interface**: All UI text in Catalan for local use
+- **Automatic Report Location**: Reports saved to Downloads folder by default
 
-Package the CLI as a standalone executable that runs without requiring Python installation.
+## Installation
 
-### Advantages
+### Pre-built Executables
 
-- No Python installation required on user machines
-- Single file distribution
-- Works on Windows, Mac, and Linux
-- Minimal development effort
+Download the appropriate executable for your platform:
 
-### Implementation
+| Platform | File | Size |
+|----------|------|------|
+| Windows | `ConflictFlaggerAEC.exe` | ~67 MB |
+| macOS | `Flagger` | ~134 MB |
 
-```bash
-# Install PyInstaller
-pip install pyinstaller
-
-# Create standalone executable
-pyinstaller --onefile --name conflict-flagger src/main.py
-
-# Output: dist/conflict-flagger.exe (Windows) or dist/conflict-flagger (Mac/Linux)
-```
-
-### Usage
-
-Users can run the executable from command line or create batch scripts:
-
-**Windows batch file (compare.bat):**
-```batch
-@echo off
-conflict-flagger.exe --ifc "%1" --bc3 "%2" --output report.xlsx
-pause
-```
-
-**Mac/Linux shell script (compare.sh):**
-```bash
-#!/bin/bash
-./conflict-flagger --ifc "$1" --bc3 "$2" --output report.xlsx
-open report.xlsx
-```
-
-### Distribution
-
-1. Build executable on target platform
-2. Distribute single file to users
-3. Users run from command line or via scripts
-
-### Considerations
-
-- Build separately for each OS (Windows, Mac, Linux)
-- Large file size (~50-100MB due to bundled Python + dependencies)
-- ifcopenshell may require special handling during packaging
-
----
-
-## Option 2: Streamlit Web Interface
-
-### Description
-
-Create a local web application with a modern, user-friendly interface that runs in the browser but executes locally.
-
-### Advantages
-
-- Modern, intuitive drag-and-drop interface
-- No command line knowledge required
-- Real-time progress feedback
-- Easy to develop and maintain
-- Cross-platform (runs in any browser)
-
-### Implementation
-
-**Install Streamlit:**
-```bash
-pip install streamlit
-```
-
-**Create app.py:**
-```python
-import streamlit as st
-import tempfile
-import os
-from src.parsers.ifc_parser import IFCParser
-from src.parsers.bc3_parser import BC3Parser
-from src.matching.matcher import Matcher
-from src.comparison.comparator import Comparator
-from src.reporting.reporter import Reporter
-
-st.set_page_config(
-    page_title="Conflict Flagger AEC",
-    page_icon="🏗️",
-    layout="wide"
-)
-
-st.title("🏗️ Conflict Flagger AEC")
-st.markdown("Detecta discrepancias entre modelos BIM (IFC) y presupuestos (BC3)")
-
-# File uploaders
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("📐 Modelo IFC")
-    ifc_file = st.file_uploader("Selecciona archivo IFC", type=['ifc'])
-
-with col2:
-    st.subheader("💰 Presupuesto BC3")
-    bc3_file = st.file_uploader("Selecciona archivo BC3", type=['bc3'])
-
-# Options
-st.sidebar.header("⚙️ Opciones")
-tolerance = st.sidebar.slider("Tolerancia numérica (%)", 1, 10, 1) / 100
-use_name_matching = st.sidebar.checkbox("Emparejar por nombre", value=True)
-
-# Process button
-if ifc_file and bc3_file:
-    if st.button("🔍 Analizar", type="primary"):
-        with st.spinner("Procesando..."):
-            # Save uploaded files temporarily
-            with tempfile.TemporaryDirectory() as tmpdir:
-                ifc_path = os.path.join(tmpdir, "model.ifc")
-                bc3_path = os.path.join(tmpdir, "budget.bc3")
-                report_path = os.path.join(tmpdir, "report.xlsx")
-
-                with open(ifc_path, "wb") as f:
-                    f.write(ifc_file.getbuffer())
-                with open(bc3_path, "wb") as f:
-                    f.write(bc3_file.getbuffer())
-
-                # Process
-                progress = st.progress(0)
-
-                st.text("Parseando IFC...")
-                ifc_result = IFCParser().parse(ifc_path)
-                progress.progress(25)
-
-                st.text("Parseando BC3...")
-                bc3_result = BC3Parser().parse(bc3_path)
-                progress.progress(50)
-
-                st.text("Emparejando elementos...")
-                matcher = Matcher(match_by_name=use_name_matching)
-                match_result = matcher.match(ifc_result, bc3_result)
-                progress.progress(75)
-
-                st.text("Comparando y generando informe...")
-                comparator = Comparator(tolerance=tolerance)
-                comparison = comparator.compare(match_result)
-                Reporter().generate_report(match_result, comparison, report_path)
-                progress.progress(100)
-
-                # Show results
-                st.success("✅ Análisis completado")
-
-                # Summary metrics
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Emparejados", len(match_result.matched))
-                col2.metric("Sin Presupuestar", len(match_result.ifc_only))
-                col3.metric("Sin Modelar", len(match_result.bc3_only))
-                col4.metric("Discrepancias", len(comparison.conflicts))
-
-                # Download button
-                with open(report_path, "rb") as f:
-                    st.download_button(
-                        label="📥 Descargar Informe Excel",
-                        data=f.read(),
-                        file_name="informe_comparacion.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-else:
-    st.info("👆 Sube ambos archivos para comenzar el análisis")
-
-# Footer
-st.markdown("---")
-st.markdown("*Conflict Flagger AEC - Validación automática de proyectos BIM*")
-```
-
-### Running the App
+### From Source
 
 ```bash
-# Development
-streamlit run app.py
-
-# Opens browser at http://localhost:8501
-```
-
-### Distribution Options
-
-**Option A: Python + Streamlit (for technical users)**
-```bash
+# Install dependencies
 pip install -r requirements.txt
-streamlit run app.py
+pip install tkinterdnd2 pillow
+
+# Run the application
+python src/app_comparator.py
 ```
 
-**Option B: Executable with Streamlit**
+## Usage
+
+1. **Launch the Application**
+   - Windows: Double-click `ConflictFlaggerAEC.exe`
+   - macOS: Double-click `Flagger`
+
+2. **Select Files**
+   - Drag and drop your `.ifc` file onto the left upload zone
+   - Drag and drop your `.bc3` file onto the right upload zone
+   - Or click on each zone to browse and select files
+
+3. **Generate Report**
+   - Click the green "Generar Excel" button
+   - Wait for processing to complete
+   - The Excel report opens automatically
+
+4. **Review Results**
+   - Report is saved in your Downloads folder
+   - Filename format: `informe_YYYYMMDD_HHMMSS.xlsx`
+
+## Interface
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [Servitec Logo]                                     Flagger    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   Compara fitxers IFC i BC3 per detectar discrepàncies         │
+│                                                                 │
+│  ┌─────────────────────────┐   ┌─────────────────────────┐     │
+│  │      📄 .IFC            │   │      📄 .BC3            │     │
+│  │                         │   │                         │     │
+│  │   Arrossega aquí o      │   │   Arrossega aquí o      │     │
+│  │   fes clic per pujar    │   │   fes clic per pujar    │     │
+│  │                         │   │                         │     │
+│  │   Model BIM             │   │   Pressupost            │     │
+│  └─────────────────────────┘   └─────────────────────────┘     │
+│                                                                 │
+│              ┌────────────────────────────┐                    │
+│              │     Generar Excel          │                    │
+│              └────────────────────────────┘                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Building from Source
+
+### Requirements
+
+- Python 3.10+
+- PyInstaller
+- All project dependencies
+
+### Build Commands
+
+**macOS:**
 ```bash
-pip install pyinstaller
-# Create launcher script and package
+pyinstaller --clean --noconfirm conflict_flagger.spec
+# Output: dist/Flagger
 ```
 
-**Option C: Docker container**
-```dockerfile
-FROM python:3.10-slim
-WORKDIR /app
-COPY . .
-RUN pip install -r requirements.txt streamlit
-EXPOSE 8501
-CMD ["streamlit", "run", "app.py"]
+**Windows (native):**
+```bash
+pyinstaller --clean --noconfirm conflict_flagger.spec
+# Output: dist/ConflictFlaggerAEC.exe
 ```
 
-### Interface Preview
+**Windows (via Wine on macOS):**
+```bash
+# Ensure Wine has Python with all dependencies installed
+wine python -m pip install ifcopenshell tkinterdnd2 pillow openpyxl pyinstaller
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  🏗️ Conflict Flagger AEC                                    │
-│  Detecta discrepancias entre modelos BIM y presupuestos    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────┐    ┌─────────────────────┐        │
-│  │ 📐 Modelo IFC       │    │ 💰 Presupuesto BC3  │        │
-│  │                     │    │                     │        │
-│  │  [Drag & Drop]      │    │  [Drag & Drop]      │        │
-│  │  or click to browse │    │  or click to browse │        │
-│  │                     │    │                     │        │
-│  └─────────────────────┘    └─────────────────────┘        │
-│                                                             │
-│              [ 🔍 Analizar ]                                │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│  ✅ Análisis completado                                     │
-│                                                             │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐               │
-│  │   47   │ │   56   │ │   21   │ │  175   │               │
-│  │Emparej.│ │Sin Pres│ │Sin Mod.│ │Discrep.│               │
-│  └────────┘ └────────┘ └────────┘ └────────┘               │
-│                                                             │
-│              [ 📥 Descargar Informe Excel ]                 │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+# Build
+wine python -m PyInstaller --clean --noconfirm --distpath dist_win conflict_flagger.spec
+# Output: dist_win/ConflictFlaggerAEC.exe
 ```
 
----
+## Technical Details
 
-## Comparison
+### Architecture
 
-| Feature | PyInstaller | Streamlit |
-|---------|-------------|-----------|
-| User Interface | Command line | Web browser |
-| Ease of use | Technical users | All users |
-| Development time | 1 hour | 2-3 hours |
-| File size | ~100MB | Requires Python |
-| Drag & drop | No | Yes |
-| Progress feedback | Text only | Visual progress bar |
-| Cross-platform | Build per OS | Any browser |
-| Updates | Redistribute exe | Update code |
+The desktop app integrates with the core library modules:
 
-## Recommendation
+```
+app_comparator.py
+    ├── src/parsers/ifc_parser.py    # IFC file parsing
+    ├── src/parsers/bc3_parser.py    # BC3 file parsing
+    ├── src/matching/matcher.py       # Element matching
+    ├── src/comparison/comparator.py  # Discrepancy detection
+    └── src/reporting/reporter.py     # Excel report generation
+```
 
-1. **Start with Streamlit** for office use - more user-friendly
-2. **Add PyInstaller** for distribution to external users without Python
+### Dependencies
 
-## Future Enhancements
+| Library | Purpose |
+|---------|---------|
+| `tkinter` | Base GUI framework |
+| `tkinterdnd2` | Drag and drop support |
+| `PIL/Pillow` | Logo image display |
+| `ifcopenshell` | IFC file parsing |
+| `openpyxl` | Excel report generation |
 
-- [ ] Batch processing multiple file pairs
-- [ ] Save/load comparison settings
-- [ ] Email report automatically
-- [ ] Integration with cloud storage (OneDrive, Google Drive)
-- [ ] Multi-language interface support
-- [ ] Dark mode theme
+### PyInstaller Spec
+
+The `conflict_flagger.spec` file configures:
+- Single-file executable (compressed)
+- All hidden imports for ifcopenshell
+- Data files (parsers, logo, etc.)
+- Platform-specific settings (argv_emulation for macOS)
+
+## Output Report
+
+The generated Excel report includes:
+
+| Sheet | Description |
+|-------|-------------|
+| Resum | Summary statistics |
+| Discrepàncies | Detected conflicts with details |
+| Elements Emparellats | Successfully matched elements |
+| Sense Pressupostar | IFC elements without budget match |
+| Sense Modelar | Budget items without IFC element |
+| Resum Elements | Consolidated element summary |
+
+## Troubleshooting
+
+### App doesn't start
+
+- **Windows**: Ensure Visual C++ Redistributable is installed
+- **macOS**: Right-click and select "Open" to bypass Gatekeeper
+
+### Drag and drop not working
+
+- Ensure `tkinterdnd2` is installed
+- On some systems, click-to-browse is the fallback
+
+### Missing ifcopenshell error
+
+- The pre-built executables include all dependencies
+- If building from source, install with: `pip install ifcopenshell`
+
+### Report not opening
+
+- Check your Downloads folder
+- Ensure you have an application to open .xlsx files
