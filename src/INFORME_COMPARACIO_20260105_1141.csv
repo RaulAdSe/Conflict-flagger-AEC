@@ -1,0 +1,556 @@
+INFORME DE COMPARACION IFC - BC3;;
+Generado: 05/01/2026 11:41;;
+;;
+RESUMEN EJECUTIVO;;
+398 errores y 136 avisos detectados;;
+;;
+ESTADISTICAS DE EMPAREJAMIENTO;;
+Concepto;Valor;Descripcion
+Tipos en modelo IFC;398;Familias/tipos encontrados en el archivo IFC
+Partidas en presupuesto BC3;136;Elementos encontrados en el archivo BC3
+Emparejados correctamente;0;Elementos que coinciden entre modelo y presupuesto
+Solo en IFC (sin presupuestar);398;Elementos modelados pero no incluidos en presupuesto
+Solo en BC3 (sin modelar);136;Partidas presupuestadas pero no modeladas
+Tasa de emparejamiento;0.0%;Porcentaje de elementos emparejados
+;;
+RESULTADOS DE LA COMPARACION;;
+Tipo;Codi/Nom;Estat
+Error (Solo en IFC);Plataforma:Zahorra 30cm:349011;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355870;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422209;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393332;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393330;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422918:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393383;No trobat al BC3
+Error (Solo en IFC);Barandilla:1100mm:386975;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350232;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393592;No trobat al BC3
+Error (Solo en IFC);PUERTA IKEMA BASICA:PI 1_3000x3000:361870:1;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:414688;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355879;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392475:1;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393561;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393408;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393326;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:404028;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393334;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350252;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421766;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:399798;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393438;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353950;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:414915;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0762 x 2032mm:423784;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353933;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388727;No trobat al BC3
+Error (Solo en IFC);Escalera prefabricada:Escalera:386523 Run 1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:399784;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394418;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355837;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420099;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:392842;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:425876;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:358938;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392548;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393565;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393559;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393406;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:414916;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420154;No trobat al BC3
+Error (Solo en IFC);Muro cortina:Storefront:421351;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393585;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421806;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420137;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:422126;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393433;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393448;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393580;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:388682;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:408070;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:384872;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHormPref_20cm:358026;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 800 mm:350262;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420171;No trobat al BC3
+Error (Solo en IFC);Muro básico:COMPOSITE:402832;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:358820;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:392549;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:408068;No trobat al BC3
+Error (Solo en IFC);SIAMGRAND Aluminium Door sliding (f-s-s-f) NOVA 10:2900x2400 Gray:398875;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421796;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):404025;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393792;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:414689;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:379487;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355839;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355828;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355873;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393560;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:387723;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393581;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421442;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0813 x 2134mm:423542:1;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:389208;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355864;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393378;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHormPref_20cm:358024;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393437;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393589;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421777;No trobat al BC3
+Error (Solo en IFC);Plataforma:Zahorra 30cm:418774;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393587;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 100:423385;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 100:423746;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393393;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394421;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:352950;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:406413;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420135;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420101;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420100;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350238;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355874;No trobat al BC3
+Error (Solo en IFC);Barandilla:1100mm:386979;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420116;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:399792;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393390;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:392286;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394420;No trobat al BC3
+Error (Solo en IFC);Suelo:EST_SUE_PlacaAlveolar+Solera+SueloCeramico_40cm:384999;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393392;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355838;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:406611;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392475;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393801;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393562;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:379260;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393409;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:358362;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:387724;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355877;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355847;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:389214;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393594;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393599;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421997;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393441;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:392421;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355883;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:358821;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393410;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394419;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355826;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355881;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421801;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394422;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421997:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421794;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392281:1;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:425901;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:384616;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350246;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:405649;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355829;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388722;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353931;No trobat al BC3
+Error (Solo en IFC);Escalera prefabricada:Escalera:386523;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421899;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355834;No trobat al BC3
+Error (Solo en IFC);Plataforma:Zahorra 30cm:404650;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:400732;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421805;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393436;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355868;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394416;No trobat al BC3
+Error (Solo en IFC);Muro básico:COMPOSITE:402788;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420118;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:358939;No trobat al BC3
+Error (Solo en IFC);Muro cortina:Storefront:393318;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393595;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:388860;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:389210;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392837;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393384;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:392841;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421800;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355290;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355852;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:384723;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355859;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393793;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:388113;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393443;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393376;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393444;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393404;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393403;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393445;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393381;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393375;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355846;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388673;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393563;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0762 x 2032mm:423784:1;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353901;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350240;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421775;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:422185;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:399810;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:405558;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420136;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393386;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421802;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421798;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:425893;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393319;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394413;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:300 x 450 mm:385807;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392418;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393399;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421762;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392418:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394415;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:407563;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421773;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421792;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420153;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:392032:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393388;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393588;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355841;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393382;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353918;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420152;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393434;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:425706;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHormPref_20cm:358023;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393405;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420169;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393584;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:200x200x80cm HL=10cm:388858;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421442:1;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):404025:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393411;No trobat al BC3
+Error (Solo en IFC);Cubierta básica:Generic - 125mm:359208;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393597;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393796;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393794;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350254;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392281;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393387;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393449;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHPREF_Base_20cm 2:408607;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393402;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350242;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394417;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:389212;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353948;No trobat al BC3
+Error (Solo en IFC);PUERTA IKEMA BASICA:PI 1_3000x3000:361870;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421803;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393798;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_HormInSitu_20cm:415086;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 1200mm Grid:387587;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355856;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:392840;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393379;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:388680;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393398;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393582;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:425909;No trobat al BC3
+Error (Solo en IFC);EST_FUN_HormLimpiezaVR:EST_FUN_HormLimpiezaVR:356134;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388735;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393566;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355872;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393328;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393799;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:392478;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421795;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394423;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388678;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393374;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355850;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:419898;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350250;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355875;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393394;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355865;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:392422;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:392480;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421771;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:387579;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:422454;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:425707;No trobat al BC3
+Error (Solo en IFC);Plataforma:Zahorra 30cm:415821;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:425708;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393432;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355861;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393439;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:360464;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393596;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:415981;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:392284;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHormPref_20cm:405941;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355845;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392548:1;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393336;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393564;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:394391;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:419673;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355854;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:387943;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:394399;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:394397;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393583;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350234;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Panic and Exit Devices_PUSH_Vachette ASSA ABLOY 3D:VLPE6840X:404026;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:379485;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355863;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420170;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388720;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393795;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393600;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355882;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420065;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:425709;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393800;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420084;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:418802;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393380;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_PanelHormPref_20cm:358025;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:394395;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:392551;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421793;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:421899:1;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 800 mm:350258;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393389;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420064;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393590;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:358361;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:407571;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Doorset_Emergency Exit Door_HardwareSet 3D:930x2110 (1070X2200):392837:1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393447;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:200x200x80cm HL=10cm:355832;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393324;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:300 x 450 mm:386398;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:391935;No trobat al BC3
+Error (Solo en IFC);Plataforma:Zahorra 30cm:404906;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353903;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355855;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420117;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 800 mm:350260;No trobat al BC3
+Error (Solo en IFC);PUERTA IKEMA BASICA:PI 1_3000x3000:392789;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393338;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Architectural and Accessory Hardware_TONIC LINE_Litto ASSA ABLOY_TL1102LSS 3D:4XTL1102LSS:392423;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422209:1;No trobat al BC3
+Error (Solo en IFC);Escalera prefabricada:Escalera:386523 Run 2;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355848;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422795:1;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:400 x 800mm:388278;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:391935:1;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:392479;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:388733;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0813 x 2134mm:423542;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355830;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 800 mm:350264;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421804;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393407;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420083;No trobat al BC3
+Error (Solo en IFC);Muro básico:COMPOSITE:402151;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:404027;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421797;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393395;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:392032;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393377;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:419987;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 800 mm:350256;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355836;No trobat al BC3
+Error (Solo en IFC);PUERTA IKEMA BASICA:PI 1_3000x3000:392789:1;No trobat al BC3
+Error (Solo en IFC);Techo compuesto:600 x 600mm Grid:425885;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421778;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350236;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355866;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:394414;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422918;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 100:423494;No trobat al BC3
+Error (Solo en IFC);EST_FUN_VigaRiostra+HormLimpieza:VR_400x600_HormLimp_100 mm:356133;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393586;No trobat al BC3
+Error (Solo en IFC);M_Single-Flush:0915 x 2134mm:422795;No trobat al BC3
+Error (Solo en IFC);Escalera prefabricada:Escalera:386523 Landing 1;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421767;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393391;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353468;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:394393;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393442;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393435;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355857;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:399804;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420082;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393567;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393598;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393591;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 140 - EXT ROJO:393797;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - 135mm Partition (2-hr):406707;No trobat al BC3
+Error (Solo en IFC);M_Parking Space:4800 x 2400mm  0 deg:420063;No trobat al BC3
+Error (Solo en IFC);Muro básico:Interior - Blockwork 100:421985;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:300 x 450 mm:385856;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_HormInSitu_20cm:415535;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355824;No trobat al BC3
+Error (Solo en IFC);Suelo:Generic 200mm:416891;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_Horm_Limpieza:EST_FUN_Zapata_Horm_Limpieza:355292;No trobat al BC3
+Error (Solo en IFC);EST_FUN_Zapata_HormLimp:300x300x100cm HL=10cm:355843;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393440;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393593;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350244;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:379327;No trobat al BC3
+Error (Solo en IFC);Muro básico:COMPOSITE:402887;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421765;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:421776;No trobat al BC3
+Error (Solo en IFC);Pilar rectangular hormigón:600 x 600 mm:350248;No trobat al BC3
+Error (Solo en IFC);System Panel:Glazed:393558;No trobat al BC3
+Error (Solo en IFC);JACENA I:I-220:353916;No trobat al BC3
+Error (Solo en IFC);Hormigón-Viga rectangular:300 x 450 mm:386396;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:392550;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:393446;No trobat al BC3
+Error (Solo en IFC);Rectangular Mullion:50 x 150mm:421799;No trobat al BC3
+Error (Solo en IFC);ASSA ABLOY BE_Door Closers_Cam-Motion®_ASSA ABLOY_DC500 3D:DC500:392285;No trobat al BC3
+Error (Solo en IFC);Muro básico:ARQ_MUR_BloqueHorm_20cm:423052;No trobat al BC3
+Aviso (Solo en BC3);2154006ce6da807a10c52529#;No trobat a l'IFC
+Aviso (Solo en BC3);49488;No trobat a l'IFC
+Aviso (Solo en BC3);421478;No trobat a l'IFC
+Aviso (Solo en BC3);141749;No trobat a l'IFC
+Aviso (Solo en BC3);29097;No trobat a l'IFC
+Aviso (Solo en BC3);19848;No trobat a l'IFC
+Aviso (Solo en BC3);49561;No trobat a l'IFC
+Aviso (Solo en BC3);378878;No trobat a l'IFC
+Aviso (Solo en BC3);25223;No trobat a l'IFC
+Aviso (Solo en BC3);422360;No trobat a l'IFC
+Aviso (Solo en BC3);23;No trobat a l'IFC
+Aviso (Solo en BC3);403;No trobat a l'IFC
+Aviso (Solo en BC3);416200;No trobat a l'IFC
+Aviso (Solo en BC3);379821;No trobat a l'IFC
+Aviso (Solo en BC3);379058;No trobat a l'IFC
+Aviso (Solo en BC3);d01be03cc289732a91b81be1#;No trobat a l'IFC
+Aviso (Solo en BC3);cd56c8aa009fe005b32465f1#;No trobat a l'IFC
+Aviso (Solo en BC3);2001350#;No trobat a l'IFC
+Aviso (Solo en BC3);385031#;No trobat a l'IFC
+Aviso (Solo en BC3);2008107#;No trobat a l'IFC
+Aviso (Solo en BC3);2000126#;No trobat a l'IFC
+Aviso (Solo en BC3);2001340#;No trobat a l'IFC
+Aviso (Solo en BC3);355425;No trobat a l'IFC
+Aviso (Solo en BC3);2000160#;No trobat a l'IFC
+Aviso (Solo en BC3);350145;No trobat a l'IFC
+Aviso (Solo en BC3);395062;No trobat a l'IFC
+Aviso (Solo en BC3);2000700#;No trobat a l'IFC
+Aviso (Solo en BC3);Cut;No trobat a l'IFC
+Aviso (Solo en BC3);49504;No trobat a l'IFC
+Aviso (Solo en BC3);361849;No trobat a l'IFC
+Aviso (Solo en BC3);415245;No trobat a l'IFC
+Aviso (Solo en BC3);171672;No trobat a l'IFC
+Aviso (Solo en BC3);88723c3731b7932f9f4568ac#;No trobat a l'IFC
+Aviso (Solo en BC3);Áreas_PB#;No trobat a l'IFC
+Aviso (Solo en BC3);355121;No trobat a l'IFC
+Aviso (Solo en BC3);421251;No trobat a l'IFC
+Aviso (Solo en BC3);01763966511d36575635ed50#;No trobat a l'IFC
+Aviso (Solo en BC3);2001320#;No trobat a l'IFC
+Aviso (Solo en BC3);2000996#;No trobat a l'IFC
+Aviso (Solo en BC3);151741#;No trobat a l'IFC
+Aviso (Solo en BC3);387531;No trobat a l'IFC
+Aviso (Solo en BC3);356146#;No trobat a l'IFC
+Aviso (Solo en BC3);2000120#;No trobat a l'IFC
+Aviso (Solo en BC3);352900;No trobat a l'IFC
+Aviso (Solo en BC3);54539;No trobat a l'IFC
+Aviso (Solo en BC3);2000038#;No trobat a l'IFC
+Aviso (Solo en BC3);12609#;No trobat a l'IFC
+Aviso (Solo en BC3);Revit##0;No trobat a l'IFC
+Aviso (Solo en BC3);102462;No trobat a l'IFC
+Aviso (Solo en BC3);2000035#;No trobat a l'IFC
+Aviso (Solo en BC3);Habit_PB#;No trobat a l'IFC
+Aviso (Solo en BC3);416196;No trobat a l'IFC
+Aviso (Solo en BC3);2000051#;No trobat a l'IFC
+Aviso (Solo en BC3);356180;No trobat a l'IFC
+Aviso (Solo en BC3);12611;No trobat a l'IFC
+Aviso (Solo en BC3);350147;No trobat a l'IFC
+Aviso (Solo en BC3);759;No trobat a l'IFC
+Aviso (Solo en BC3);49480;No trobat a l'IFC
+Aviso (Solo en BC3);404;No trobat a l'IFC
+Aviso (Solo en BC3);380816;No trobat a l'IFC
+Aviso (Solo en BC3);405309;No trobat a l'IFC
+Aviso (Solo en BC3);f2d4f20de81b017428fb8429#;No trobat a l'IFC
+Aviso (Solo en BC3);384768;No trobat a l'IFC
+Aviso (Solo en BC3);8486;No trobat a l'IFC
+Aviso (Solo en BC3);360277;No trobat a l'IFC
+Aviso (Solo en BC3);418400;No trobat a l'IFC
+Aviso (Solo en BC3);12613#;No trobat a l'IFC
+Aviso (Solo en BC3);2000011#;No trobat a l'IFC
+Aviso (Solo en BC3);163904#;No trobat a l'IFC
+Aviso (Solo en BC3);49484;No trobat a l'IFC
+Aviso (Solo en BC3);2008163#;No trobat a l'IFC
+Aviso (Solo en BC3);384444;No trobat a l'IFC
+Aviso (Solo en BC3);416213;No trobat a l'IFC
+Aviso (Solo en BC3);8c7cea80df2bffefc425b808#;No trobat a l'IFC
+Aviso (Solo en BC3);2003101#;No trobat a l'IFC
+Aviso (Solo en BC3);2000032#;No trobat a l'IFC
+Aviso (Solo en BC3);ffa15592296ee41928620a0a#;No trobat a l'IFC
+Aviso (Solo en BC3);2003200#;No trobat a l'IFC
+Aviso (Solo en BC3);f1585d0e69143b52aa3d4bca#;No trobat a l'IFC
+Aviso (Solo en BC3);349637#;No trobat a l'IFC
+Aviso (Solo en BC3);378959#;No trobat a l'IFC
+Aviso (Solo en BC3);360932#;No trobat a l'IFC
+Aviso (Solo en BC3);378874;No trobat a l'IFC
+Aviso (Solo en BC3);385754;No trobat a l'IFC
+Aviso (Solo en BC3);402158;No trobat a l'IFC
+Aviso (Solo en BC3);368759#;No trobat a l'IFC
+Aviso (Solo en BC3);1bdb3e9f0abc22a9cab2723d#;No trobat a l'IFC
+Aviso (Solo en BC3);2001180#;No trobat a l'IFC
+Aviso (Solo en BC3);404303;No trobat a l'IFC
+Aviso (Solo en BC3);2000170#;No trobat a l'IFC
+Aviso (Solo en BC3);378926#;No trobat a l'IFC
+Aviso (Solo en BC3);c5d2dd0bf170338eeffbfdb5#;No trobat a l'IFC
+Aviso (Solo en BC3);2000171#;No trobat a l'IFC
+Aviso (Solo en BC3);2001300#;No trobat a l'IFC
+Aviso (Solo en BC3);398;No trobat a l'IFC
+Aviso (Solo en BC3);2000920#;No trobat a l'IFC
+Aviso (Solo en BC3);3b84c223c87cf9064f14146f#;No trobat a l'IFC
+Aviso (Solo en BC3);398098;No trobat a l'IFC
+Aviso (Solo en BC3);414195;No trobat a l'IFC
+Aviso (Solo en BC3);19847;No trobat a l'IFC
+Aviso (Solo en BC3);423885;No trobat a l'IFC
+Aviso (Solo en BC3);408701;No trobat a l'IFC
+Aviso (Solo en BC3);422357;No trobat a l'IFC
+Aviso (Solo en BC3);68751ca122004bd195d41eb1#;No trobat a l'IFC
+Aviso (Solo en BC3);137323;No trobat a l'IFC
+Aviso (Solo en BC3);400270;No trobat a l'IFC
+Aviso (Solo en BC3);356145#;No trobat a l'IFC
+Aviso (Solo en BC3);384484;No trobat a l'IFC
+Aviso (Solo en BC3);3ac1d0acb7c1b37cfcba658e#;No trobat a l'IFC
+Aviso (Solo en BC3);b74e94d46b2c057a14f47255#;No trobat a l'IFC
+Aviso (Solo en BC3);358283;No trobat a l'IFC
+Aviso (Solo en BC3);Áreas_P1#;No trobat a l'IFC
+Aviso (Solo en BC3);416203;No trobat a l'IFC
+Aviso (Solo en BC3);378892;No trobat a l'IFC
+Aviso (Solo en BC3);463aba37a91624c06d68e298#;No trobat a l'IFC
+Aviso (Solo en BC3);423688;No trobat a l'IFC
+Aviso (Solo en BC3);171671;No trobat a l'IFC
+Aviso (Solo en BC3);8482#;No trobat a l'IFC
+Aviso (Solo en BC3);Habit_P1#;No trobat a l'IFC
+Aviso (Solo en BC3);354019#;No trobat a l'IFC
+Aviso (Solo en BC3);2003100#;No trobat a l'IFC
+Aviso (Solo en BC3);360466;No trobat a l'IFC
+Aviso (Solo en BC3);419784;No trobat a l'IFC
+Aviso (Solo en BC3);73a5c388732eabc8da8068e5#;No trobat a l'IFC
+Aviso (Solo en BC3);2001330#;No trobat a l'IFC
+Aviso (Solo en BC3);12615;No trobat a l'IFC
+Aviso (Solo en BC3);Fill;No trobat a l'IFC
+Aviso (Solo en BC3);2001263#;No trobat a l'IFC
+Aviso (Solo en BC3);2000919#;No trobat a l'IFC
+Aviso (Solo en BC3);351049#;No trobat a l'IFC
+Aviso (Solo en BC3);395101#;No trobat a l'IFC
+Aviso (Solo en BC3);2c4e32d1964278dd07b2eda4#;No trobat a l'IFC
+Aviso (Solo en BC3);337;No trobat a l'IFC
+Aviso (Solo en BC3);355123#;No trobat a l'IFC
+Aviso (Solo en BC3);378977#;No trobat a l'IFC
+Aviso (Solo en BC3);2000023#;No trobat a l'IFC
+;;
+LEYENDA DE COLORES;;
+;Rojo;Error - Requiere atencion inmediata
+;Amarillo;Aviso - Revisar
+;Verde;Correcto
