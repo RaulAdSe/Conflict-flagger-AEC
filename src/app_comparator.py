@@ -355,7 +355,7 @@ class ModernButton(tk.Canvas):
         self._draw_rounded_rect_filled(0, 0, w, h, radius, bg_color)
 
         # Draw download icon
-        icon_x = w // 2 - 70
+        icon_x = w // 2 - 85
         icon_y = h // 2
 
         # Arrow down

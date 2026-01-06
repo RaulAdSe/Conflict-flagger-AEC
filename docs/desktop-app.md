@@ -22,7 +22,24 @@ Download the appropriate executable for your platform:
 | Platform | File | Size |
 |----------|------|------|
 | Windows | `ConflictFlaggerAEC.exe` | ~67 MB |
-| macOS | `Flagger` | ~134 MB |
+| macOS | `Flagger.app` | ~413 MB |
+
+#### Why the size difference?
+
+The macOS `.app` bundle is significantly larger than the Windows `.exe` due to different packaging strategies:
+
+| Aspect | Windows (.exe) | macOS (.app) |
+|--------|----------------|--------------|
+| **Format** | Single compressed archive | Uncompressed folder bundle |
+| **Compression** | All files packed and compressed inside executable | Files stored uncompressed in `Contents/` folder |
+| **At runtime** | Extracts to temp folder, then runs | Runs directly from bundle |
+| **Startup time** | Slower (must decompress) | Faster (no decompression) |
+
+The actual content is similar (~400MB uncompressed), but:
+- **Windows**: Compressed into a single 67MB file
+- **macOS**: Stored as-is in the .app bundle (413MB)
+
+This is standard practice for macOS applications - Apple recommends uncompressed bundles for better Gatekeeper compatibility and faster launch times.
 
 ### From Source
 

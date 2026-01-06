@@ -45,7 +45,7 @@ The easiest way to use Conflict Flagger is the desktop application:
 
 1. Download the executable for your platform:
    - **Windows**: `ConflictFlaggerAEC.exe` (~67 MB)
-   - **macOS**: `Flagger` (~134 MB)
+   - **macOS**: `Flagger.app` (~413 MB)
 
 2. Launch the application and drag & drop your files:
    - Drop `.ifc` file on the left zone

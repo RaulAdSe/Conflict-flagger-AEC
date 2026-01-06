@@ -1,7 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
 PyInstaller spec file for Conflict Flagger AEC
-Builds cross-platform desktop application - single-file executables
+Builds cross-platform desktop application
+- macOS: .app bundle
+- Windows: single-file .exe
 """
 
 import sys
@@ -53,26 +55,70 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Both platforms: Single-file executable (smaller, compressed)
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='ConflictFlaggerAEC' if sys.platform == 'win32' else 'Flagger',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=True if sys.platform == 'darwin' else False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=None,
-)
+if sys.platform == 'darwin':
+    # macOS: Create .app bundle
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='Flagger',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=True,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=None,
+    )
+
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='Flagger',
+    )
+
+    app = BUNDLE(
+        coll,
+        name='Flagger.app',
+        icon=None,
+        bundle_identifier='com.servitec.flagger',
+        info_plist={
+            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleVersion': '1.0.0',
+            'NSHighResolutionCapable': True,
+        },
+    )
+else:
+    # Windows: Single-file executable
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='ConflictFlaggerAEC',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=None,
+    )
