@@ -1,3 +1,27 @@
+"""
+Conflict Flagger AEC - Main Application
+
+A modern desktop application for comparing IFC building models with BC3 budgets.
+Features a macOS-style UI with drag & drop support and phase-based analysis.
+
+ARCHITECTURE:
+=============
+This app uses a modular pipeline:
+    IFC File ─┐
+              ├─> Parsers ─> Matcher ─> Comparator ─> Reporter ─> Excel
+    BC3 File ─┘
+
+Each component is independent and configurable via PhaseConfig.
+This allows different analysis depths without code duplication.
+
+PHASES:
+=======
+- QUICK_CHECK: Fast validation (codes, units, quantities)
+- FULL_ANALYSIS: Comprehensive comparison (all properties)
+
+See src/phases/config.py for phase definitions.
+"""
+
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
@@ -28,6 +52,7 @@ try:
     from src.matching.matcher import Matcher
     from src.comparison.comparator import Comparator
     from src.reporting.reporter import Reporter
+    from src.phases.config import Phase, PHASES, get_phase_config
 except ImportError:
     # Standalone mode (PyInstaller build)
     from parsers.ifc_parser import IFCParser
@@ -35,6 +60,7 @@ except ImportError:
     from matching.matcher import Matcher
     from comparison.comparator import Comparator
     from reporting.reporter import Reporter
+    from phases.config import Phase, PHASES, get_phase_config
 
 
 class ModernUploadZone(tk.Canvas):
@@ -396,12 +422,18 @@ class ModernButton(tk.Canvas):
 
 
 class ConflictFlaggerApp:
-    """Main application with modern macOS-style UI."""
+    """
+    Main application with modern macOS-style UI.
+
+    Supports phase-based analysis:
+    - Quick Check: Fast validation of codes, units, quantities
+    - Full Analysis: Comprehensive property comparison
+    """
 
     def __init__(self, root):
         self.root = root
         self.root.title("Flagger")
-        self.root.geometry("640x450")
+        self.root.geometry("640x520")  # Slightly taller to accommodate phase selector
         self.root.resizable(False, False)
 
         # Colors from design mockup
@@ -417,6 +449,9 @@ class ConflictFlaggerApp:
         # File paths
         self.path_ifc = tk.StringVar()
         self.path_bc3 = tk.StringVar()
+
+        # Phase selection (default to Full Analysis)
+        self.selected_phase = tk.StringVar(value=Phase.FULL_ANALYSIS.value)
 
         # Configure root background
         self.root.configure(bg=self.bg_color)
@@ -450,7 +485,7 @@ class ConflictFlaggerApp:
         return None
 
     def _build_content(self):
-        """Build the main content area with upload zones and button."""
+        """Build the main content area with upload zones, phase selector, and button."""
         content = tk.Frame(self.main_frame, bg=self.card_color)
         content.pack(fill="both", expand=True, padx=40, pady=20)
 
@@ -505,7 +540,7 @@ class ConflictFlaggerApp:
 
         # Upload zones container
         zones_frame = tk.Frame(content, bg=self.card_color)
-        zones_frame.pack(fill="x", pady=(0, 24))
+        zones_frame.pack(fill="x", pady=(0, 16))
 
         # IFC upload zone
         self.ifc_zone = ModernUploadZone(
@@ -529,9 +564,12 @@ class ConflictFlaggerApp:
         )
         self.bc3_zone.pack(side="right", padx=(10, 10))
 
+        # Phase selector
+        self._build_phase_selector(content, font_family)
+
         # Arrow divider
-        arrow_frame = tk.Frame(content, bg=self.card_color, height=40)
-        arrow_frame.pack(fill="x", pady=(0, 24))
+        arrow_frame = tk.Frame(content, bg=self.card_color, height=30)
+        arrow_frame.pack(fill="x", pady=(8, 16))
 
         arrow_canvas = tk.Canvas(arrow_frame, width=24, height=24, bg=self.card_color, highlightthickness=0)
         arrow_canvas.pack()
@@ -558,6 +596,44 @@ class ConflictFlaggerApp:
             fg=self.text_secondary
         )
         self.status_label.pack(pady=(15, 0))
+
+    def _build_phase_selector(self, parent, font_family):
+        """
+        Build the phase selection UI.
+
+        This allows users to choose between Quick Check and Full Analysis.
+        The phase determines what comparisons are performed and how results
+        are reported.
+        """
+        phase_frame = tk.Frame(parent, bg=self.card_color)
+        phase_frame.pack(fill="x", pady=(0, 8))
+
+        # Phase label
+        phase_label = tk.Label(
+            phase_frame,
+            text="Tipus d'anàlisi:",
+            font=(font_family, 12),
+            bg=self.card_color,
+            fg=self.text_secondary
+        )
+        phase_label.pack(side="left", padx=(10, 15))
+
+        # Radio buttons for phase selection
+        for phase in Phase:
+            config = PHASES[phase]
+            rb = tk.Radiobutton(
+                phase_frame,
+                text=config.name,
+                variable=self.selected_phase,
+                value=phase.value,
+                font=(font_family, 12),
+                bg=self.card_color,
+                fg=self.text_primary,
+                activebackground=self.card_color,
+                selectcolor=self.card_color,
+                cursor="hand2"
+            )
+            rb.pack(side="left", padx=(0, 20))
 
     def _draw_arrow(self, active=False):
         """Draw the arrow divider, green when both files are selected."""
@@ -657,13 +733,31 @@ class ConflictFlaggerApp:
         # Ultimate fallback: home directory
         return Path.home()
 
+    def _get_selected_phase(self) -> Phase:
+        """Get the currently selected analysis phase."""
+        phase_value = self.selected_phase.get()
+        for phase in Phase:
+            if phase.value == phase_value:
+                return phase
+        return Phase.FULL_ANALYSIS  # Default fallback
+
     def generate_excel_report(self):
-        """Generate the Excel comparison report using the backend pipeline."""
+        """
+        Generate the Excel comparison report using the backend pipeline.
+
+        The analysis depth depends on the selected phase:
+        - QUICK_CHECK: Fast validation of codes, units, quantities
+        - FULL_ANALYSIS: Comprehensive property comparison
+        """
         if not self.path_ifc.get() or not self.path_bc3.get():
             messagebox.showwarning("Warning", "Please select both files.")
             return
 
-        self._set_status("Starting analysis...")
+        # Get selected phase and its configuration
+        phase = self._get_selected_phase()
+        phase_config = get_phase_config(phase)
+
+        self._set_status(f"Starting {phase_config.name}...")
         self.download_btn.set_text("Processing...")
         self.download_btn.set_active(False)
 
@@ -695,26 +789,31 @@ class ConflictFlaggerApp:
             self._set_status(f"Matched: {len(match_result.matched)}")
             self.root.update()
 
-            # 4. Compare matched elements using Comparator
-            self._set_status("Comparing properties...")
+            # 4. Compare matched elements using Comparator (configured by phase)
+            self._set_status("Comparing elements...")
             self.root.update()
-            comparator = Comparator(tolerance=0.01)
-            comparison_result = comparator.compare(match_result)
+            comparator = Comparator(
+                tolerance=phase_config.quantity_tolerance,
+                compare_names=phase_config.check_names
+            )
+            comparison_result = comparator.compare(match_result, phase_config)
             summary = comparison_result.summary()
             self._set_status(f"Conflicts: {summary['total_conflicts']}")
             self.root.update()
 
-            # 5. Generate report using Reporter
+            # 5. Generate report using Reporter (configured by phase)
             self._set_status("Generating Excel report...")
             self.root.update()
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_path = output_dir / f"Report_AEC_{timestamp}.xlsx"
+            phase_suffix = "quick" if phase == Phase.QUICK_CHECK else "full"
+            output_path = output_dir / f"Report_AEC_{phase_suffix}_{timestamp}.xlsx"
 
             reporter = Reporter()
             report_path = reporter.generate_report(
                 match_result,
                 comparison_result,
-                output_path
+                output_path,
+                phase_config=phase_config
             )
 
             self._set_status(f"Report saved successfully")
@@ -723,6 +822,7 @@ class ConflictFlaggerApp:
             messagebox.showinfo(
                 "Informe Generat",
                 f"L'informe s'ha generat correctament!\n\n"
+                f"Tipus d'anàlisi: {phase_config.name}\n\n"
                 f"Emparellats: {len(match_result.matched)} elements\n"
                 f"Nomes a IFC (sense pressupostar): {len(match_result.ifc_only)}\n"
                 f"Nomes a BC3 (sense modelar): {len(match_result.bc3_only)}\n\n"
@@ -733,15 +833,7 @@ class ConflictFlaggerApp:
             )
 
             # Try to open the file (cross-platform)
-            try:
-                if sys.platform == "darwin":
-                    subprocess.run(['open', str(report_path)], check=False)
-                elif sys.platform == "win32":
-                    os.startfile(str(report_path))
-                else:
-                    subprocess.run(['xdg-open', str(report_path)], check=False)
-            except Exception as open_error:
-                self._set_status(f"Could not open file automatically")
+            self._open_file_cross_platform(report_path)
 
         except FileNotFoundError as e:
             self._set_status(f"Error: File not found")
@@ -753,6 +845,25 @@ class ConflictFlaggerApp:
             # Restore button state
             self.download_btn.set_text("Descarrega Excel")
             self._update_button_state()
+
+    def _open_file_cross_platform(self, file_path):
+        """
+        Open a file using the system's default application.
+
+        This is a cross-platform solution that works on:
+        - macOS: uses 'open' command
+        - Windows: uses os.startfile
+        - Linux: uses 'xdg-open' command
+        """
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(['open', str(file_path)], check=False)
+            elif sys.platform == "win32":
+                os.startfile(str(file_path))
+            else:
+                subprocess.run(['xdg-open', str(file_path)], check=False)
+        except Exception as open_error:
+            self._set_status(f"Could not open file automatically")
 
 
 def main():

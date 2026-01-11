@@ -2,13 +2,27 @@
 Comparator for finding differences between matched IFC and BC3 elements.
 
 Compares properties, quantities, and metadata to flag discrepancies.
+
+PHASE SUPPORT:
+==============
+The compare() method accepts an optional PhaseConfig that controls:
+- Whether to compare properties (deep analysis)
+- Whether to compare names
+- Tolerance for quantity comparisons
+
+This allows the same Comparator to support both quick checks and
+comprehensive analysis without code duplication.
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from src.matching.matcher import MatchedPair, MatchResult
+
+# Import PhaseConfig only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from src.phases.config import PhaseConfig
 
 
 class ConflictType(Enum):
@@ -129,19 +143,33 @@ class Comparator:
         self.tolerance = tolerance
         self.compare_names = compare_names
 
-    def compare(self, match_result: MatchResult) -> ComparisonResult:
+    def compare(self, match_result: MatchResult, phase_config: 'PhaseConfig' = None) -> ComparisonResult:
         """
         Compare all matched pairs and find conflicts.
 
         Args:
             match_result: Result from the Matcher
+            phase_config: Optional phase configuration that controls comparison depth.
+                         If None, performs full analysis.
 
         Returns:
             ComparisonResult with all conflicts found
+
+        Phase Support:
+            - QUICK_CHECK: Only compares codes, units, quantities (check_properties=False)
+            - FULL_ANALYSIS: Compares all properties (check_properties=True)
         """
         conflicts = []
         errors = []
         codes_with_conflicts = set()
+
+        # Determine comparison depth from phase config
+        check_properties = True  # Default to full analysis
+        if phase_config is not None:
+            check_properties = phase_config.check_properties
+            # Update tolerance from phase config
+            self.tolerance = phase_config.quantity_tolerance
+            self.compare_names = phase_config.check_names
 
         # Report missing items
         for pair in match_result.ifc_only:
@@ -172,7 +200,7 @@ class Comparator:
         total_props_compared = 0
         for pair in match_result.matched:
             try:
-                pair_conflicts, props_compared = self._compare_pair(pair)
+                pair_conflicts, props_compared = self._compare_pair(pair, check_properties)
                 conflicts.extend(pair_conflicts)
                 total_props_compared += props_compared
 
@@ -193,9 +221,14 @@ class Comparator:
             errors=errors
         )
 
-    def _compare_pair(self, pair: MatchedPair) -> tuple[list[Conflict], int]:
+    def _compare_pair(self, pair: MatchedPair, check_properties: bool = True) -> tuple[list[Conflict], int]:
         """
         Compare a single matched pair.
+
+        Args:
+            pair: The matched IFC-BC3 pair to compare
+            check_properties: Whether to perform deep property comparison.
+                            False for quick checks (only basic validation).
 
         Returns:
             Tuple of (list of conflicts, number of properties compared)
@@ -214,7 +247,11 @@ class Comparator:
             name_conflicts = self._compare_names(pair)
             conflicts.extend(name_conflicts)
 
-        # Compare properties
+        # Skip property comparison if not requested (quick check mode)
+        if not check_properties:
+            return conflicts, props_compared
+
+        # Compare properties (only in full analysis mode)
         bc3_props = bc3.properties or {}
         ifc_props = ifc.properties or {}
 
