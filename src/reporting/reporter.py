@@ -3,11 +3,21 @@ Reporter for generating Excel reports with conflict visualization.
 
 Generates color-coded Excel reports showing differences between IFC and BC3.
 Reports are in Spanish for AEC professionals.
+
+PHASE SUPPORT:
+==============
+The generate_report() method accepts an optional PhaseConfig that controls:
+- Which sheets to generate
+- Whether to include summary sheet
+- Whether to show OK matches
+
+This allows the same Reporter to produce different outputs for quick checks
+vs comprehensive analysis without code duplication.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -17,6 +27,10 @@ from src.matching.matcher import MatchResult, MatchedPair, MatchStatus
 from src.comparison.comparator import (
     ComparisonResult, Conflict, ConflictType, ConflictSeverity
 )
+
+# Import PhaseConfig only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from src.phases.config import PhaseConfig
 
 
 # Spanish translations for conflict types and messages
@@ -90,7 +104,8 @@ class Reporter:
         match_result: MatchResult,
         comparison_result: ComparisonResult,
         output_path: str | Path,
-        include_summary: bool = True
+        include_summary: bool = True,
+        phase_config: 'PhaseConfig' = None
     ) -> Path:
         """
         Generate an Excel report.
@@ -99,10 +114,16 @@ class Reporter:
             match_result: Result from the Matcher
             comparison_result: Result from the Comparator
             output_path: Path for the output Excel file
-            include_summary: Whether to include a summary sheet
+            include_summary: Whether to include a summary sheet (can be overridden by phase_config)
+            phase_config: Optional phase configuration that controls which sheets to generate.
+                         If None, generates all sheets (full analysis mode).
 
         Returns:
             Path to the generated report
+
+        Phase Support:
+            - QUICK_CHECK: Generates only Discrepàncies sheet
+            - FULL_ANALYSIS: Generates all sheets (Resumen, Discrepancias, etc.)
         """
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,14 +134,34 @@ class Reporter:
         if "Sheet" in wb.sheetnames:
             del wb["Sheet"]
 
-        # Create sheets with Spanish names
-        if include_summary:
+        # Determine which sheets to generate based on phase config
+        if phase_config is not None:
+            sheets_to_generate = set(phase_config.sheets)
+            include_summary = phase_config.include_summary
+        else:
+            # Default to all sheets (full analysis)
+            sheets_to_generate = {"Resumen", "Discrepancias", "Elementos Emparejados",
+                                  "Sin Presupuestar", "Sin Modelar"}
+
+        # Create sheets based on configuration
+        if include_summary and ("Resumen" in sheets_to_generate or "Resum" in sheets_to_generate):
             self._create_summary_sheet(wb, match_result, comparison_result)
 
-        self._create_conflicts_sheet(wb, comparison_result)
-        self._create_matches_sheet(wb, match_result, comparison_result)
-        self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
-        self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
+        # Discrepancies sheet (always included in any phase)
+        if any(s in sheets_to_generate for s in ["Discrepancias", "Discrepàncies"]):
+            self._create_conflicts_sheet(wb, comparison_result)
+
+        # Matched elements sheet
+        if "Elementos Emparejados" in sheets_to_generate:
+            self._create_matches_sheet(wb, match_result, comparison_result)
+
+        # Missing in budget sheet
+        if "Sin Presupuestar" in sheets_to_generate:
+            self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
+
+        # Missing in model sheet
+        if "Sin Modelar" in sheets_to_generate:
+            self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
 
         wb.save(output_path)
         return output_path
