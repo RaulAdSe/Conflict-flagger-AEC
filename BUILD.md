@@ -1,8 +1,51 @@
 # Build Guide - Conflict Flagger AEC
 
-This guide explains how to build the Windows executable. Both team members can build the `.exe` - your teammate natively on Windows, and you via Wine on macOS.
+## TL;DR - Quick Start on Mac
 
-## Overview
+```bash
+# First time setup (creates both venvs)
+./setup_dev.sh
+
+# Run tests
+source venv/bin/activate && pytest tests/
+
+# Build Windows .exe
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+```
+
+---
+
+## Understanding the Two Virtual Environments
+
+**On Mac, you need TWO separate Python environments:**
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         YOUR MAC                                         │
+│                                                                          │
+│   ┌─────────────────────┐         ┌─────────────────────────────────┐   │
+│   │      venv/          │         │         venv_win/               │   │
+│   │   (Mac Python)      │         │     (Wine = Windows Python)     │   │
+│   │                     │         │                                 │   │
+│   │  • Run tests        │         │  • Build .exe for Windows       │   │
+│   │  • Development      │         │  • Uses Python inside Wine      │   │
+│   │  • Build .app       │         │  • Like having a Windows PC     │   │
+│   │                     │         │                                 │   │
+│   │  Activate:          │         │  Use with:                      │   │
+│   │  source venv/bin/   │         │  wine venv_win/Scripts/...      │   │
+│   │         activate    │         │                                 │   │
+│   └─────────────────────┘         └─────────────────────────────────┘   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why?**
+- `venv/` = Regular Mac Python. For developing, testing, and building the Mac `.app`
+- `venv_win/` = Python running inside Wine (a Windows emulator). This lets you build a **real Windows .exe** without needing a Windows computer!
+
+---
+
+## Output Summary
 
 | Platform | Output | Who Can Build |
 |----------|--------|---------------|
@@ -246,6 +289,15 @@ wine python-3.11.7-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
 # Install Visual C++ runtime in Wine
 winetricks vcrun2019
 ```
+
+### Wine: `ucrtbase.dll.crealf` error
+
+If you see `wine: Unimplemented function ucrtbase.dll.crealf`, downgrade numpy:
+```bash
+wine venv_win/Scripts/pip.exe install "numpy<2.0" --force-reinstall
+```
+
+Wine 10.0 doesn't support numpy 2.x's use of `crealf()`. Use numpy 1.26.x instead.
 
 ### Wine: Build hangs or crashes
 

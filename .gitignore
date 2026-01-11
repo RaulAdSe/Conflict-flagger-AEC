@@ -21,7 +21,12 @@ wheels/
 *.egg
 
 # Virtual environments
-venv/
+venv/          # Mac Python venv
+venv_win/      # Wine Python venv (for building .exe on Mac)
+
+# Wine build artifacts
+build_win/
+dist_win/
 ENV/
 env/
 .venv/
