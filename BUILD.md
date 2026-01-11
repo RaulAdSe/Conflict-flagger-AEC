@@ -1,209 +1,175 @@
 # Build Guide - Conflict Flagger AEC
 
-This guide explains how to build the desktop application for **macOS** and **Windows**. Since you and your teammate use different operating systems, this document covers both workflows.
+This guide explains how to build the Windows executable. Both team members can build the `.exe` - your teammate natively on Windows, and you via Wine on macOS.
 
 ## Overview
 
-The application uses **PyInstaller** to create standalone executables. The build configuration is in `conflict_flagger.spec`.
-
-| Platform | Output | Build On |
-|----------|--------|----------|
-| macOS | `Flagger.app` (~413 MB) | Mac only |
-| Windows | `ConflictFlaggerAEC.exe` (~67 MB) | Windows only |
-
-**Important**: Each platform must be built on its native OS. You cannot cross-compile (e.g., build Windows .exe on Mac directly).
+| Platform | Output | Who Can Build |
+|----------|--------|---------------|
+| Windows | `ConflictFlaggerAEC.exe` (~67 MB) | Both (native or via Wine) |
+| macOS | `Flagger.app` (~413 MB) | Mac only (optional) |
 
 ---
 
-## Prerequisites
+## Building on Windows (Native)
 
-### Both Platforms
+### Prerequisites
 
-```bash
-# 1. Clone the repository
+1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
+   - **Important**: Check "Add Python to PATH" during installation
+
+2. Clone and setup:
+```powershell
 git clone https://github.com/RaulAdSe/Conflict-flagger-AEC.git
 cd Conflict-flagger-AEC
 
-# 2. Create virtual environment (recommended)
+# Create virtual environment
 python -m venv venv
-
-# Activate it:
-# macOS/Linux:
-source venv/bin/activate
-# Windows:
 venv\Scripts\activate
 
-# 3. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
-
-# 4. Install build tools
 pip install pyinstaller pillow tkinterdnd2
 ```
 
-### macOS Specific
-- Python 3.10+ (via Homebrew or python.org)
-- Xcode Command Line Tools: `xcode-select --install`
+### Build the .exe
 
-### Windows Specific
-- Python 3.10+ from [python.org](https://www.python.org/downloads/)
-- Add Python to PATH during installation
-
----
-
-## Building for macOS (Your Mac)
-
-### Quick Build
-
-```bash
-# From repository root
+```powershell
 pyinstaller --clean --noconfirm conflict_flagger.spec
 ```
 
-### Using the build script
-
-```bash
-python build_app.py --clean
-```
-
-### Output Location
-
-```
-dist/
-└── Flagger.app/          # The macOS application bundle
-    └── Contents/
-        └── MacOS/
-            └── Flagger   # The actual executable
-```
-
-### Testing the Build
-
-```bash
-# Run directly
-./dist/Flagger.app/Contents/MacOS/Flagger
-
-# Or open normally
-open dist/Flagger.app
-```
-
-### Distribution
-
-To share with other Mac users:
-```bash
-# Create a zip for distribution
-cd dist
-zip -r Flagger-macOS.zip Flagger.app
-```
-
----
-
-## Building for Windows (Your Teammate)
-
-### Quick Build
-
-```powershell
-# From repository root (PowerShell or CMD)
-pyinstaller --clean --noconfirm conflict_flagger.spec
-```
-
-### Using the build script
-
-```powershell
-python build_app.py --clean
-```
-
-### Alternative: Using the batch file
-
+Or use the batch file:
 ```powershell
 .\build_windows.bat
 ```
 
-### Output Location
+### Output
 
 ```
-dist/
-└── ConflictFlaggerAEC.exe    # Single-file Windows executable
+dist\
+└── ConflictFlaggerAEC.exe    # Ready to distribute!
 ```
 
-### Testing the Build
+---
 
-Double-click `ConflictFlaggerAEC.exe` or run from command line:
-```powershell
-.\dist\ConflictFlaggerAEC.exe
+## Building on macOS via Wine
+
+### Prerequisites
+
+1. Install Wine (if not already installed):
+```bash
+# Using Homebrew
+brew install --cask wine-stable
+
+# Or using MacPorts
+sudo port install wine
 ```
 
-### Distribution
+2. Install Python **inside Wine**:
+```bash
+# Download Python installer
+curl -O https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.exe
 
-The `.exe` file is self-contained and can be shared directly.
+# Run installer in Wine
+wine python-3.11.7-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
+```
+
+3. Setup the project in Wine:
+```bash
+cd Conflict-flagger-AEC
+
+# Create venv using Wine's Python
+wine python -m venv venv_win
+
+# Activate and install dependencies
+wine venv_win/Scripts/pip.exe install -r requirements.txt
+wine venv_win/Scripts/pip.exe install pyinstaller pillow tkinterdnd2
+```
+
+### Build the .exe
+
+```bash
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+```
+
+Or shorter (if Wine Python is in PATH):
+```bash
+wine python -m PyInstaller --clean --noconfirm --distpath dist_win conflict_flagger.spec
+```
+
+### Output
+
+```
+dist_win/
+└── ConflictFlaggerAEC.exe    # Windows executable built on Mac!
+```
+
+### Testing with Wine
+
+```bash
+wine dist_win/ConflictFlaggerAEC.exe
+```
+
+---
+
+## Building macOS .app (Optional)
+
+If you also want a native Mac app:
+
+```bash
+# Activate Mac venv (not Wine)
+source venv/bin/activate
+
+# Build
+pyinstaller --clean --noconfirm conflict_flagger.spec
+```
+
+Output: `dist/Flagger.app/`
 
 ---
 
 ## Team Workflow
 
-Since you're on Mac and your teammate is on Windows, here's the recommended workflow:
-
-### Option A: Each Builds Their Own Platform (Recommended)
-
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     GitHub Repository                        │
-│                                                              │
-│  ┌──────────────┐                    ┌──────────────┐       │
-│  │   You (Mac)  │                    │ Teammate (Win)│       │
-│  │              │                    │              │       │
-│  │ 1. git pull  │                    │ 1. git pull  │       │
-│  │ 2. pyinstaller│                   │ 2. pyinstaller│       │
-│  │ 3. Flagger.app│                   │ 3. .exe      │       │
-│  └──────────────┘                    └──────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      GitHub Repository                           │
+│                                                                   │
+│   ┌─────────────────────┐          ┌─────────────────────┐       │
+│   │     You (Mac)       │          │   Teammate (Win)    │       │
+│   │                     │          │                     │       │
+│   │  1. git pull        │          │  1. git pull        │       │
+│   │  2. wine pyinstaller│          │  2. pyinstaller     │       │
+│   │  3. .exe ✓          │          │  3. .exe ✓          │       │
+│   │                     │          │                     │       │
+│   │  (optional: .app)   │          │                     │       │
+│   └─────────────────────┘          └─────────────────────┘       │
+│                                                                   │
+│   Either of you can produce the Windows .exe for distribution    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-**Steps:**
+**Advantages of this setup:**
+- No dependency on one person for builds
+- Either can release when needed
+- Wine builds are identical to native Windows builds
 
-1. **You** push code changes to GitHub
-2. **Teammate** pulls latest changes
-3. **Each** builds for their own platform
-4. **Both** upload executables to GitHub Releases
+---
 
-### Option B: GitHub Actions (Automated)
+## Quick Reference
 
-For automated builds, create `.github/workflows/build.yml`:
+### For your teammate (Windows):
+```powershell
+git pull
+venv\Scripts\activate
+pyinstaller --clean --noconfirm conflict_flagger.spec
+# Output: dist\ConflictFlaggerAEC.exe
+```
 
-```yaml
-name: Build Executables
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt pyinstaller pillow tkinterdnd2
-      - run: pyinstaller --clean --noconfirm conflict_flagger.spec
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Flagger-macOS
-          path: dist/Flagger.app
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt pyinstaller pillow tkinterdnd2
-      - run: pyinstaller --clean --noconfirm conflict_flagger.spec
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Flagger-Windows
-          path: dist/ConflictFlaggerAEC.exe
+### For you (Mac via Wine):
+```bash
+git pull
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+# Output: dist/ConflictFlaggerAEC.exe
 ```
 
 ---
@@ -212,21 +178,16 @@ jobs:
 
 The app supports different analysis phases selected at **runtime** (not build time).
 
-### Available Phases
-
 | Phase | Description | Speed |
 |-------|-------------|-------|
 | **Comprovació Ràpida** | Codes, units, quantities only | Fast |
 | **Anàlisi Completa** | All properties compared | Thorough |
 
-### How Users Select
-
 Users choose the phase via radio buttons in the UI before clicking "Generar Excel".
 
 ### Changing Default Phase
 
-To change which phase is selected by default, edit `src/app_comparator.py`:
-
+Edit `src/app_comparator.py`:
 ```python
 # Line ~454 - Change default value:
 self.selected_phase = tk.StringVar(value=Phase.QUICK_CHECK.value)
@@ -269,24 +230,30 @@ PHASES = {
 
 ## Troubleshooting
 
-### macOS: "App is damaged and can't be opened"
+### Wine: Python not found
 
 ```bash
-# Remove quarantine attribute
-xattr -cr dist/Flagger.app
+# Check Wine Python installation
+wine python --version
+
+# If not found, reinstall:
+wine python-3.11.7-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
 ```
 
-### macOS: Gatekeeper blocks the app
+### Wine: Missing DLLs
 
-Right-click > Open > Open anyway, or:
 ```bash
-spctl --add dist/Flagger.app
+# Install Visual C++ runtime in Wine
+winetricks vcrun2019
 ```
 
-### Windows: Missing DLLs
+### Wine: Build hangs or crashes
 
-Install Visual C++ Redistributable:
-https://aka.ms/vs/17/release/vc_redist.x64.exe
+Try with a fresh Wine prefix:
+```bash
+WINEPREFIX=~/.wine_flagger wine python -m venv venv_win
+# ... continue with setup
+```
 
 ### Windows: Antivirus blocks the exe
 
@@ -297,18 +264,8 @@ Add an exception for the build directory or sign the executable.
 If you see `ModuleNotFoundError` for phases or other modules:
 
 1. Verify `conflict_flagger.spec` includes all modules in `datas=[]`
-2. Clean build: `pyinstaller --clean --noconfirm conflict_flagger.spec`
-3. Check `hiddenimports=[]` for any missing dependencies
-
-### Build takes too long
-
-Exclude unnecessary packages in `conflict_flagger.spec`:
-```python
-excludes=[
-    'pytest', 'pytest_cov', 'matplotlib', 'scipy',
-    'numpy.testing', 'IPython', 'jupyter',
-]
-```
+2. Clean build with `--clean` flag
+3. Delete `build/` and `dist/` folders and rebuild
 
 ---
 
@@ -317,20 +274,18 @@ excludes=[
 Before creating a release:
 
 - [ ] All tests pass: `python -m pytest`
-- [ ] Version updated in `conflict_flagger.spec`
-- [ ] Both Mac and Windows builds tested
-- [ ] README updated with download links
-- [ ] Create GitHub Release with both executables
+- [ ] Version updated in `conflict_flagger.spec` (if needed)
+- [ ] Windows .exe tested (native or Wine)
+- [ ] Create GitHub Release with the executable
 
 ---
 
-## File Structure Reference
+## File Structure
 
 ```
 conflict-flagger-aec/
 ├── conflict_flagger.spec     # PyInstaller configuration
-├── build_app.py              # Python build helper script
-├── build_mac.sh              # macOS build script
+├── build_app.py              # Python build helper
 ├── build_windows.bat         # Windows build script
 ├── src/
 │   ├── app_comparator.py     # Main GUI application
@@ -341,7 +296,8 @@ conflict-flagger-aec/
 │   ├── matching/
 │   ├── comparison/
 │   └── reporting/
-└── dist/                     # Build output (gitignored)
-    ├── Flagger.app/          # macOS build
-    └── ConflictFlaggerAEC.exe # Windows build
+├── venv/                     # Mac Python venv
+├── venv_win/                 # Wine Python venv (Mac only)
+└── dist/                     # Build output
+    └── ConflictFlaggerAEC.exe
 ```
