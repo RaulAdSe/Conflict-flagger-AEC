@@ -2,6 +2,10 @@
 IFC-BC3 Conflict Flagger
 
 Main entry point for comparing BIM models (IFC) with cost estimates (BC3).
+
+Supports phase-based analysis:
+- quick: Fast validation (codes, units, quantities only)
+- full: Comprehensive comparison (all properties)
 """
 
 import argparse
@@ -15,6 +19,7 @@ from src.parsers.bc3_parser import BC3Parser
 from src.matching.matcher import Matcher
 from src.comparison.comparator import Comparator
 from src.reporting.reporter import Reporter
+from src.phases.config import Phase, get_phase_config
 
 
 def parse_args():
@@ -79,6 +84,13 @@ Examples:
         help="Quiet mode - only output file path"
     )
 
+    parser.add_argument(
+        "--phase",
+        choices=["quick", "full"],
+        default="full",
+        help="Analysis phase: 'quick' (codes/quantities only) or 'full' (all properties). Default: full"
+    )
+
     return parser.parse_args()
 
 
@@ -138,10 +150,15 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = Path(f"report_{timestamp}.xlsx")
 
+    # Get phase configuration
+    phase = Phase.QUICK_CHECK if args.phase == "quick" else Phase.FULL_ANALYSIS
+    phase_config = get_phase_config(phase)
+
     if not args.quiet:
         print(f"📂 IFC file: {ifc_path}")
         print(f"📂 BC3 file: {bc3_path}")
         print(f"📊 Output:   {output_path}")
+        print(f"🔧 Phase:    {phase_config.name}")
         print("\nProcessing...")
 
     try:
@@ -162,20 +179,21 @@ def main():
         matcher = Matcher(match_by_name=not args.no_name_matching)
         match_result = matcher.match(ifc_result, bc3_result)
 
-        # Compare matched elements
+        # Compare matched elements (using phase configuration)
         if not args.quiet:
             print("  Comparing properties...")
         comparator = Comparator(tolerance=args.tolerance)
-        comparison_result = comparator.compare(match_result)
+        comparison_result = comparator.compare(match_result, phase_config)
 
-        # Generate report
+        # Generate report (using phase configuration)
         if not args.quiet:
             print("  Generating report...")
         reporter = Reporter()
         report_path = reporter.generate_report(
             match_result,
             comparison_result,
-            output_path
+            output_path,
+            phase_config=phase_config
         )
 
         # Generate JSON if requested
