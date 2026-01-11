@@ -204,19 +204,3 @@ Esto requeriría adaptar el Excel de salida actual o añadir una hoja adicional 
 2. **Decisión**: Elegir entre desktop/web/híbrido
 3. **Prototipo**: Crear MVP de la interfaz elegida
 4. **Pilar 3**: Definir requisitos concretos para soporte de Memoria Constructiva
-
----
-
-## Comentarios del Equipo
-
-*Añadir comentarios aquí:*
-
-| Miembro | Fecha | Comentario |
-|---------|-------|------------|
-| | | |
-| | | |
-| | | |
-
----
-
-**Contacto:** [Añadir información de contacto para discusión]
