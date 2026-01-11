@@ -3,6 +3,9 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 ifcopenshell>=0.7.0
 
+# Desktop app
+pyinstaller>=6.0.0
+
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.0.0

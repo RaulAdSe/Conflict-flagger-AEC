@@ -3,11 +3,21 @@ Reporter for generating Excel reports with conflict visualization.
 
 Generates color-coded Excel reports showing differences between IFC and BC3.
 Reports are in Spanish for AEC professionals.
+
+PHASE SUPPORT:
+==============
+The generate_report() method accepts an optional PhaseConfig that controls:
+- Which sheets to generate
+- Whether to include summary sheet
+- Whether to show OK matches
+
+This allows the same Reporter to produce different outputs for quick checks
+vs comprehensive analysis without code duplication.
 """
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -17,6 +27,10 @@ from src.matching.matcher import MatchResult, MatchedPair, MatchStatus
 from src.comparison.comparator import (
     ComparisonResult, Conflict, ConflictType, ConflictSeverity
 )
+
+# Import PhaseConfig only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from src.phases.config import PhaseConfig
 
 
 # Spanish translations for conflict types and messages
@@ -90,7 +104,8 @@ class Reporter:
         match_result: MatchResult,
         comparison_result: ComparisonResult,
         output_path: str | Path,
-        include_summary: bool = True
+        include_summary: bool = True,
+        phase_config: 'PhaseConfig' = None
     ) -> Path:
         """
         Generate an Excel report.
@@ -99,10 +114,16 @@ class Reporter:
             match_result: Result from the Matcher
             comparison_result: Result from the Comparator
             output_path: Path for the output Excel file
-            include_summary: Whether to include a summary sheet
+            include_summary: Whether to include a summary sheet (can be overridden by phase_config)
+            phase_config: Optional phase configuration that controls which sheets to generate.
+                         If None, generates all sheets (full analysis mode).
 
         Returns:
             Path to the generated report
+
+        Phase Support:
+            - QUICK_CHECK: Generates only Discrepàncies sheet
+            - FULL_ANALYSIS: Generates all sheets (Resumen, Discrepancias, etc.)
         """
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,14 +134,37 @@ class Reporter:
         if "Sheet" in wb.sheetnames:
             del wb["Sheet"]
 
-        # Create sheets with Spanish names
-        if include_summary:
+        # Determine which sheets to generate based on phase config
+        if phase_config is not None:
+            sheets_to_generate = set(phase_config.sheets)
+            include_summary = phase_config.include_summary
+        else:
+            # Default to all sheets (full analysis)
+            sheets_to_generate = {"Resumen", "Discrepancias", "Elementos Emparejados",
+                                  "Sin Presupuestar", "Sin Modelar"}
+
+        # Create sheets based on configuration
+        if include_summary and ("Resumen" in sheets_to_generate or "Resum" in sheets_to_generate):
             self._create_summary_sheet(wb, match_result, comparison_result)
 
-        self._create_conflicts_sheet(wb, comparison_result)
-        self._create_matches_sheet(wb, match_result, comparison_result)
-        self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
-        self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
+        # Discrepancies sheet (always included in any phase)
+        if any(s in sheets_to_generate for s in ["Discrepancias", "Discrepàncies"]):
+            self._create_conflicts_sheet(wb, comparison_result)
+
+        # Matched elements sheet
+        if "Elementos Emparejados" in sheets_to_generate:
+            self._create_matches_sheet(wb, match_result, comparison_result)
+
+        # Missing in budget sheet
+        if "Sin Presupuestar" in sheets_to_generate:
+            self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
+
+        # Missing in model sheet
+        if "Sin Modelar" in sheets_to_generate:
+            self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
+
+        # Elements summary sheet (always last)
+        self._create_elements_summary_sheet(wb, match_result, comparison_result)
 
         wb.save(output_path)
         return output_path
@@ -454,6 +498,306 @@ class Reporter:
             # Warning color for all missing items
             for col in range(1, len(headers) + 1):
                 self._apply_cell_style(ws.cell(row=row_num, column=col), self.config.color_warning)
+
+        # Freeze header row
+        ws.freeze_panes = "A2"
+
+    def _collect_all_properties(self, match_result: MatchResult) -> list[str]:
+        """
+        Collect all unique property names from all elements.
+
+        Returns:
+            Sorted list of unique property names
+        """
+        property_names = set()
+
+        # From matched elements
+        for pair in match_result.matched:
+            if pair.ifc_type and pair.ifc_type.properties:
+                property_names.update(pair.ifc_type.properties.keys())
+            if pair.bc3_element and pair.bc3_element.properties:
+                property_names.update(pair.bc3_element.properties.keys())
+
+        # From IFC-only elements
+        for pair in match_result.ifc_only:
+            if pair.ifc_type and pair.ifc_type.properties:
+                property_names.update(pair.ifc_type.properties.keys())
+
+        # From BC3-only elements
+        for pair in match_result.bc3_only:
+            if pair.bc3_element and pair.bc3_element.properties:
+                property_names.update(pair.bc3_element.properties.keys())
+
+        return sorted(property_names)
+
+    def _get_element_status(
+        self,
+        match_status: MatchStatus,
+        codes: list[str],
+        comparison_result: 'ComparisonResult'
+    ) -> tuple[str, str]:
+        """
+        Get status text and color for an element group based on conflicts.
+
+        Args:
+            match_status: The match status (MATCHED, IFC_ONLY, BC3_ONLY)
+            codes: List of codes for elements in this group
+            comparison_result: The comparison result with conflicts
+
+        Returns:
+            Tuple of (status_text, color_code)
+        """
+        if match_status == MatchStatus.IFC_ONLY:
+            return ("Sin presupuestar", self.config.color_warning)
+        elif match_status == MatchStatus.BC3_ONLY:
+            return ("Sin modelar", self.config.color_warning)
+
+        # For matched elements, check conflicts across all codes in the group
+        total_errors = 0
+        total_warnings = 0
+
+        for code in codes:
+            for conflict in comparison_result.conflicts:
+                if conflict.code == code:
+                    if conflict.severity == ConflictSeverity.ERROR:
+                        total_errors += 1
+                    elif conflict.severity == ConflictSeverity.WARNING:
+                        total_warnings += 1
+
+        if total_errors > 0:
+            return (f"{total_errors} error(es), {total_warnings} aviso(s)", self.config.color_error)
+        elif total_warnings > 0:
+            return (f"{total_warnings} aviso(s)", self.config.color_warning)
+        else:
+            return ("Correcto", self.config.color_ok)
+
+    def _build_dynamic_headers(self, all_properties: list[str]) -> list[tuple[str, int]]:
+        """
+        Build the header list with fixed columns + dynamic properties.
+
+        Returns:
+            List of (header_name, column_width) tuples
+        """
+        fixed_headers = [
+            ("Familia", 25),
+            ("Nombre/Descripcion", 40),
+            ("Clase IFC", 20),
+            ("Tipo", 25),
+            ("Unidad", 10),
+            ("Cantidad", 12),
+            ("Precio (EUR)", 15),
+            ("Estado", 30),
+            ("Origen", 15),
+        ]
+
+        property_headers = [(prop, 18) for prop in all_properties]
+
+        return fixed_headers + property_headers
+
+    def _prepare_element_rows(
+        self,
+        match_result: MatchResult,
+        comparison_result: 'ComparisonResult',
+        all_properties: list[str]
+    ) -> list[dict]:
+        """
+        Prepare all element rows, grouping identical elements.
+
+        Elements are grouped by: family + type + ifc_class + all properties.
+        Identical elements are merged into a single row with summed quantities.
+
+        Returns:
+            List of row dictionaries sorted by family_name
+        """
+        # Dictionary to group identical elements
+        # Key: tuple of (family, name, ifc_class, type_name, unit, price, origin, frozen_properties)
+        groups: dict[tuple, dict] = {}
+
+        def process_pair(pair: MatchedPair, status: MatchStatus):
+            ifc = pair.ifc_type
+            bc3 = pair.bc3_element
+
+            # Extract data with IFC priority
+            family = (ifc.family_name if ifc and ifc.family_name else
+                     (bc3.family_name if bc3 and bc3.family_name else None))
+
+            name = ifc.name if ifc else (bc3.description if bc3 else "")
+
+            ifc_class = ifc.ifc_class if ifc else ""
+
+            type_name = (ifc.type_name if ifc and ifc.type_name else
+                        (bc3.type_name if bc3 and bc3.type_name else None))
+
+            unit = bc3.unit if bc3 else ""
+
+            price = bc3.price if bc3 else None
+
+            # Get quantity (instance_count for IFC, quantity for BC3)
+            quantity = 1
+            if ifc and hasattr(ifc, 'instance_count') and ifc.instance_count:
+                quantity = ifc.instance_count
+            elif bc3 and hasattr(bc3, 'quantity') and bc3.quantity:
+                quantity = bc3.quantity
+
+            # Origin mapping
+            origin_map = {
+                MatchStatus.MATCHED: "Emparejado",
+                MatchStatus.IFC_ONLY: "Solo IFC",
+                MatchStatus.BC3_ONLY: "Solo BC3"
+            }
+            origin = origin_map.get(status, "")
+
+            # Collect properties (IFC priority)
+            properties_values = {}
+            for prop_name in all_properties:
+                value = None
+                if ifc and ifc.properties and prop_name in ifc.properties:
+                    value = ifc.properties[prop_name]
+                elif bc3 and bc3.properties and prop_name in bc3.properties:
+                    value = bc3.properties[prop_name]
+                properties_values[prop_name] = value
+
+            # Create grouping key (frozen properties for hashability)
+            frozen_props = tuple(sorted(
+                (k, str(v) if v is not None else None)
+                for k, v in properties_values.items()
+            ))
+
+            group_key = (
+                family or "",
+                name,
+                ifc_class,
+                type_name or "",
+                unit,
+                price,
+                origin,
+                frozen_props
+            )
+
+            # Get code for conflict tracking
+            code = pair.code or ""
+
+            if group_key in groups:
+                groups[group_key]['quantity'] += quantity
+                groups[group_key]['codes'].append(code)
+            else:
+                groups[group_key] = {
+                    'family': family,
+                    'name': name,
+                    'ifc_class': ifc_class,
+                    'type_name': type_name,
+                    'unit': unit,
+                    'quantity': quantity,
+                    'price': price,
+                    'origin': origin,
+                    'match_status': status,
+                    'properties': properties_values,
+                    'codes': [code]
+                }
+
+        # Process all pairs
+        for pair in match_result.matched:
+            process_pair(pair, MatchStatus.MATCHED)
+
+        for pair in match_result.ifc_only:
+            process_pair(pair, MatchStatus.IFC_ONLY)
+
+        for pair in match_result.bc3_only:
+            process_pair(pair, MatchStatus.BC3_ONLY)
+
+        # Convert groups to list and add status
+        rows = []
+        for group_data in groups.values():
+            status_text, status_color = self._get_element_status(
+                group_data['match_status'],
+                group_data['codes'],
+                comparison_result
+            )
+            group_data['status_text'] = status_text
+            group_data['status_color'] = status_color
+            rows.append(group_data)
+
+        # Sort by family (None at end), then by name
+        rows.sort(key=lambda r: (
+            r['family'] or 'ZZZZZ',
+            r['name'] or ''
+        ))
+
+        return rows
+
+    def _create_elements_summary_sheet(
+        self,
+        wb: Workbook,
+        match_result: MatchResult,
+        comparison_result: 'ComparisonResult'
+    ) -> None:
+        """
+        Create an element summary sheet with all elements grouped by family.
+
+        This sheet shows ALL elements (matched, IFC-only, BC3-only) with
+        dynamic property columns, status indicators, and grouped identical elements.
+        """
+        ws = wb.create_sheet("Resumen de Elementos")
+
+        # Step 1: Collect all unique properties
+        all_properties = self._collect_all_properties(match_result)
+
+        # Step 2: Build headers
+        headers = self._build_dynamic_headers(all_properties)
+
+        # Step 3: Write headers
+        for col, (header, width) in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            self._apply_header_style(cell)
+            ws.column_dimensions[get_column_letter(col)].width = width
+
+        ws.row_dimensions[1].height = 25
+
+        # Step 4: Prepare grouped rows
+        rows_data = self._prepare_element_rows(match_result, comparison_result, all_properties)
+
+        # Step 5: Write data rows
+        for row_num, row_data in enumerate(rows_data[:self.config.max_rows], 2):
+            col = 1
+
+            # Fixed columns
+            ws.cell(row=row_num, column=col, value=row_data['family'] or "-")
+            col += 1
+            ws.cell(row=row_num, column=col, value=row_data['name'])
+            col += 1
+            ws.cell(row=row_num, column=col, value=row_data['ifc_class'] or "-")
+            col += 1
+            ws.cell(row=row_num, column=col, value=row_data['type_name'] or "-")
+            col += 1
+            ws.cell(row=row_num, column=col, value=row_data['unit'] or "-")
+            col += 1
+            ws.cell(row=row_num, column=col, value=row_data['quantity'] or 0)
+            col += 1
+
+            # Price formatted
+            price = row_data['price']
+            ws.cell(row=row_num, column=col, value=f"{price:.2f}" if price else "-")
+            col += 1
+
+            # Status
+            ws.cell(row=row_num, column=col, value=row_data['status_text'])
+            col += 1
+
+            # Origin
+            ws.cell(row=row_num, column=col, value=row_data['origin'])
+            col += 1
+
+            # Dynamic property columns
+            for prop_name in all_properties:
+                prop_value = row_data['properties'].get(prop_name)
+                ws.cell(row=row_num, column=col,
+                       value=str(prop_value) if prop_value is not None else "-")
+                col += 1
+
+            # Apply row styling with status color
+            fill_color = row_data['status_color']
+            for c in range(1, col):
+                self._apply_cell_style(ws.cell(row=row_num, column=c), fill_color)
 
         # Freeze header row
         ws.freeze_panes = "A2"
