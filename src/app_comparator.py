@@ -22,6 +22,22 @@ PHASES:
 See src/phases/config.py for phase definitions.
 """
 
+# CRITICAL: Early setup for frozen executables (PyInstaller on Windows/Wine)
+import sys
+import os
+
+# Detect if this is a re-entry/child process spawned by the main app
+# If the marker env var exists, this is a child - exit immediately
+if os.environ.get('_CONFLICT_FLAGGER_CHILD_PROCESS'):
+    sys.exit(0)
+
+# Set marker for any child processes we might spawn
+os.environ['_CONFLICT_FLAGGER_CHILD_PROCESS'] = '1'
+
+import multiprocessing
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
