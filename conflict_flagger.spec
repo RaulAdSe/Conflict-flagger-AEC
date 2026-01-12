@@ -24,6 +24,7 @@ a = Analysis(
         ('src/matching', 'matching'),
         ('src/comparison', 'comparison'),
         ('src/reporting', 'reporting'),
+        ('src/phases', 'phases'),  # Phase configuration module
         ('app_design/Servitec logo.png', 'app_design'),
     ] + ifcopenshell_datas,
     hiddenimports=[

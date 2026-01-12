@@ -43,6 +43,8 @@ Fes doble clic a l'executable. S'obrirà una finestra amb dues zones de càrrega
 │  │     Model BIM       │   │     Pressupost      │         │
 │  └─────────────────────┘   └─────────────────────┘         │
 │                                                             │
+│  Tipus d'anàlisi: ○ Comprovació Ràpida  ● Anàlisi Completa │
+│                                                             │
 │              ┌────────────────────────┐                    │
 │              │     Generar Excel      │                    │
 │              └────────────────────────┘                    │
@@ -64,6 +66,27 @@ Fes doble clic a l'executable. S'obrirà una finestra amb dues zones de càrrega
 4. Selecciona el fitxer `.bc3` des del diàleg
 
 Quan un fitxer s'ha carregat correctament, la zona es posa verda i mostra el nom del fitxer.
+
+### Pas 2.5: Seleccionar el tipus d'anàlisi
+
+Abans de generar l'informe, pots escollir el tipus d'anàlisi:
+
+| Opció | Descripció | Quan usar-la |
+|-------|------------|--------------|
+| **Comprovació Ràpida** | Només comprova codis, unitats i quantitats | Validació inicial ràpida |
+| **Anàlisi Completa** | Compara totes les propietats en detall | Auditoria exhaustiva |
+
+**Comprovació Ràpida** és ideal per:
+- Primera passada de validació
+- Fitxers molt grans on vols resultats ràpids
+- Verificar només si els codis i quantitats coincideixen
+
+**Anàlisi Completa** és ideal per:
+- Revisió final abans d'entregar
+- Detectar totes les discrepàncies possibles
+- Comparar propietats com materials, dimensions, etc.
+
+Per defecte, l'aplicació utilitza **Anàlisi Completa**.
 
 ### Pas 3: Generar l'informe
 
@@ -138,6 +161,40 @@ L'informe conté diverses pestanyes amb colors per facilitar la revisió:
 3. **Revisa primer les discrepàncies vermelles** - són les més crítiques
 4. **Corregeix al model o pressupost** segons correspongui
 5. **Torna a executar** fins a validació completa
+
+## Ús per línia de comandes (avançat)
+
+Per a usuaris tècnics, també es pot executar des de la línia de comandes:
+
+```bash
+# Anàlisi completa (per defecte)
+python -m src.main --ifc model.ifc --bc3 pressupost.bc3
+
+# Comprovació ràpida
+python -m src.main --ifc model.ifc --bc3 pressupost.bc3 --phase quick
+
+# Amb opcions addicionals
+python -m src.main \
+    --ifc model.ifc \
+    --bc3 pressupost.bc3 \
+    --phase full \
+    --output informe.xlsx \
+    --tolerance 0.02 \
+    -v
+```
+
+### Opcions disponibles
+
+| Opció | Descripció |
+|-------|------------|
+| `--ifc` | Fitxer IFC (obligatori) |
+| `--bc3` | Fitxer BC3 (obligatori) |
+| `--phase` | `quick` o `full` (per defecte: full) |
+| `--output` | Nom del fitxer Excel de sortida |
+| `--json` | Generar també un fitxer JSON |
+| `--tolerance` | Tolerància numèrica (per defecte: 0.01) |
+| `-v` | Mode verbose (més informació) |
+| `-q` | Mode silenciós (només el path de l'informe) |
 
 ## Contacte
 
