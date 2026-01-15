@@ -5,13 +5,13 @@ import os
 import pandas as pd
 from openpyxl.styles import PatternFill, Font, Alignment
 
-# --- PARSER BC3 MEJORADO ---
+# --- PARSER BC3 ---
 class BC3Parser:
     def __init__(self, filepath):
         self.filepath = filepath
 
     def parse(self):
-        """Devuelve {codigo: {'qty': float, 'unit': str, 'desc': str, 'guid': str}}"""
+        """Devuelve {codigo: {'quantity': float, 'unit': str, 'desc': str}}"""
         data = {}
         try:
             try:
@@ -21,7 +21,6 @@ class BC3Parser:
             
             lines = content.split('\n')
             
-            # 1. Leer Conceptos (~C)
             for line in lines:
                 line = line.strip()
                 if line.startswith('~C|'):
@@ -30,128 +29,137 @@ class BC3Parser:
                         code = parts[1].strip().rstrip('#')
                         unit = parts[2].strip()
                         desc = parts[3].strip()
-                        data[code] = {'desc': desc, 'unit': unit, 'quantity': 0.0, 'guid': None}
+                        data[code] = {'desc': desc, 'unit': unit, 'quantity': 0.0}
 
-            # 2. Leer Propiedades (~X) para extraer GUIDs si existen
-            for line in lines:
-                if line.startswith('~X|'):
-                    parts = line.split('|')
-                    if len(parts) > 1:
-                        code = parts[1].strip().rstrip('#')
-                        match_guid = re.search(r"IfcGUID\\([a-zA-Z0-9_$]{22})", line)
-                        if match_guid and code in data:
-                            data[code]['guid'] = match_guid.group(1)
-
-            # 3. Leer Mediciones (~M)
             for line in lines:
                 line = line.strip()
-                if line.startswith('~M|'):
+                if line.startswith('~D|'):
                     parts = line.split('|')
-                    if len(parts) > 1:
-                        hierarchy = parts[1]
-                        child_code = hierarchy.split('\\')[-1].strip().rstrip('#') if '\\' in hierarchy else hierarchy.strip().rstrip('#')
-
-                        qty = 0.0
-                        for idx in [3, 4, 2]: 
-                            if idx < len(parts):
-                                val_str = parts[idx].strip()
-                                if val_str and val_str.replace('.','',1).isdigit():
-                                    try:
-                                        qty = float(val_str)
-                                        break
-                                    except: pass
-                        
-                        if child_code in data:
-                            data[child_code]['quantity'] += qty
+                    if len(parts) >= 3:
+                        items = parts[2].split('\\')
+                        i = 0
+                        while i < len(items):
+                            child_code = items[i].strip()
+                            if child_code and i + 2 < len(items):
+                                try:
+                                    qty = float(items[i + 2].strip())
+                                    if child_code in data: data[child_code]['quantity'] += qty
+                                except: pass
+                            i += 3
             return data
         except Exception as e:
             messagebox.showerror("Error BC3", f"Error leyendo BC3: {str(e)}")
             return {}
 
-# --- PARSER IFC MEJORADO ---
+
+# --- PARSER IFC CON DESCRIPCIONES ---
 class IFCParser:
     def __init__(self, filepath):
         self.filepath = filepath
 
-    def parse(self, valid_bc3_codes=None):
+    def parse(self):
         """
-        Devuelve counts_by_code y guids_found
+        Devuelve:
+        - codes: {codigo: count}
+        - descriptions: {codigo: descripcion}
         """
-        counts_by_code = {}
-        guids_found = {}
-        if valid_bc3_codes is None: valid_bc3_codes = set()
-
+        codes = {}
+        descriptions = {}
+        
         try:
-            try:
-                with open(self.filepath, 'r', encoding='utf-8') as f: lines = f.readlines()
-            except:
-                with open(self.filepath, 'r', encoding='latin-1') as f: lines = f.readlines()
-
+            with open(self.filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
             id_map = {}
             for line in lines:
                 if line.startswith('#'):
                     idx = line.find('=')
                     if idx != -1:
-                        oid = line[:idx].strip()
-                        content = line[idx+1:].strip()
-                        id_map[oid] = content
+                        id_map[line[:idx].strip()] = line[idx+1:].strip()
             
-            # 1. Mapeo de Tipos por CÓDIGO
-            code_to_type_ids = {}
-            guid_pattern = re.compile(r'^[a-zA-Z0-9_$]{22}$')
-
-            for oid, content in id_map.items():
-                if 'TYPE(' in content or 'STYLE(' in content:
-                    candidates = re.findall(r"'([^']*)'", content)
-                    for val in candidates:
-                        code = val.strip()
-                        # FILTRO ESTRICTO
-                        is_valid = False
-                        if code in valid_bc3_codes:
-                            is_valid = True
-                        else:
-                            # Filtro anti-ruido
-                            if (len(code) < 15 and len(code) > 0 and 
-                                ' ' not in code and ':' not in code and 
-                                not guid_pattern.match(code) and 
-                                not (code.isdigit() and len(code) > 4)):
-                                is_valid = True
+            code_to_entities = {}
+            
+            for oid, cont in id_map.items():
+                if 'IFC' in cont:
+                    all_values = re.findall(r"'([^']*)'", cont)
+                    code = None
+                    desc = None
+                    
+                    for val in all_values:
+                        if val.isdigit() and 3 <= len(val) <= 10:
+                            code = val
+                        elif ':' in val and len(val) > 5:
+                            desc = val
+                    
+                    if code:
+                        if code not in code_to_entities:
+                            code_to_entities[code] = []
+                        code_to_entities[code].append(oid)
                         
-                        if is_valid:
-                            if code not in code_to_type_ids: code_to_type_ids[code] = []
-                            code_to_type_ids[code].append(oid)
-
-            # 2. Contar por CÓDIGO
-            for content in id_map.values():
-                if 'IFCRELDEFINESBYTYPE' in content:
-                    for code, type_ids in code_to_type_ids.items():
-                        for tid in type_ids:
-                            if tid in content:
-                                match_list = re.search(r"\(\s*(#[0-9, \s#]+)\)", content)
-                                if match_list:
-                                    num_objects = len(match_list.group(1).split(','))
-                                    if code not in counts_by_code: counts_by_code[code] = 0
-                                    counts_by_code[code] += num_objects
-
-            # 3. Mapeo auxiliar por GUID (GlobalId)
-            for content in id_map.values():
-                first_quote = content.find("'")
-                if first_quote != -1:
-                    guid_candidate = content[first_quote+1 : first_quote+23]
-                    if len(guid_candidate) == 22 and guid_pattern.match(guid_candidate):
-                        guids_found[guid_candidate] = 1
-
-            return counts_by_code, guids_found
+                        if desc and code not in descriptions:
+                            # Limpiar descripción IFC (quitar \X\ED etc)
+                            desc_clean = re.sub(r'\\X\\[0-9A-F]{2}', '', desc)
+                            descriptions[code] = desc_clean
+            
+            # Contar instancias
+            for code, entities in code_to_entities.items():
+                count = 0
+                for oid in entities:
+                    for rel_cont in id_map.values():
+                        if 'IFCRELDEFINES' in rel_cont and oid in rel_cont:
+                            match_list = re.search(r"\(\s*(#[0-9,\s#]+)\s*\)", rel_cont)
+                            if match_list:
+                                instances = match_list.group(1).replace(' ', '').split(',')
+                                count += len(instances)
+                                break
+                codes[code] = max(1, count)
+            
+            return codes, descriptions
 
         except Exception as e:
             messagebox.showerror("Error IFC", f"Error leyendo IFC: {str(e)}")
             return {}, {}
 
+
+# --- UTILIDADES DE MATCHING ---
+def normalize_desc(desc):
+    """Normaliza descripción para comparación"""
+    if not desc:
+        return ""
+    # Quitar caracteres especiales, convertir a minúsculas
+    desc = re.sub(r'[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s]', ' ', desc.lower())
+    # Quitar espacios múltiples
+    desc = ' '.join(desc.split())
+    return desc
+
+def calc_similarity(desc1, desc2):
+    """Calcula similitud entre dos descripciones (0-1)"""
+    words1 = set(normalize_desc(desc1).split())
+    words2 = set(normalize_desc(desc2).split())
+    
+    if not words1 or not words2:
+        return 0
+    
+    # Quitar palabras muy comunes
+    stopwords = {'de', 'la', 'el', 'en', 'con', 'para', 'por', 'a', 'y', 'o', 'mm', 'cm', 'm', 'm2', 'm3'}
+    words1 = words1 - stopwords
+    words2 = words2 - stopwords
+    
+    if not words1 or not words2:
+        return 0
+    
+    intersection = len(words1 & words2)
+    union = len(words1 | words2)
+    
+    return intersection / union if union > 0 else 0
+
+
 # --- APLICACIÓN PRINCIPAL ---
 class ComparadorBIMApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Comparador BIM - Final")
+        self.root.title("Comparador BC3 vs IFC - Con Matching")
         self.root.geometry("600x250")
 
         self.path_bc3 = tk.StringVar()
@@ -160,33 +168,67 @@ class ComparadorBIMApp:
         frame = tk.Frame(root, padx=20, pady=20)
         frame.pack(expand=True, fill='both')
 
-        tk.Label(frame, text="1. Arxiu BC3:").grid(row=0, column=0, sticky='w')
+        tk.Label(frame, text="1. Archivo BC3:").grid(row=0, column=0, sticky='w')
         tk.Entry(frame, textvariable=self.path_bc3, width=50).grid(row=0, column=1, padx=5)
         tk.Button(frame, text="...", command=lambda: self.browse(self.path_bc3, "*.bc3")).grid(row=0, column=2)
 
-        tk.Label(frame, text="2. Arxiu IFC:").grid(row=1, column=0, sticky='w', pady=10)
+        tk.Label(frame, text="2. Archivo IFC:").grid(row=1, column=0, sticky='w', pady=10)
         tk.Entry(frame, textvariable=self.path_ifc, width=50).grid(row=1, column=1, padx=5, pady=10)
         tk.Button(frame, text="...", command=lambda: self.browse(self.path_ifc, "*.ifc")).grid(row=1, column=2)
 
-        tk.Button(frame, text="COMPARAR", command=self.run_comparison, bg="#dddddd", height=2).grid(row=2, column=0, columnspan=3, pady=20, sticky='ew')
+        tk.Button(frame, text="COMPARAR", command=self.run_comparison, bg="#4CAF50", fg="white", 
+                  height=2, font=('Arial', 10, 'bold')).grid(row=2, column=0, columnspan=3, pady=20, sticky='ew')
 
     def browse(self, var, filetype):
         f = filedialog.askopenfilename(filetypes=[("Archivos", filetype)])
         if f: var.set(f)
 
     def is_ignored_item(self, code, desc):
-        """Ignora elementos irrelevantes o administrativos."""
+        """Ignora elementos que no son partidas de obra comparables"""
         ignore_terms = [
             "información", "project info", "plano", "sheet", "vista", "view",
-            "zona de", "climatización", "topografía", "surface", "habitaciones", "rooms",
-            "áreas", "areas", "system panel", "materiales", "materials", 
-            "aberturas", "hueco", "opening", "void", "corte", "líneas", "lines", 
-            "earth", "tubería", "pipe", "ductile", "hierro"
+            "zona de", "climatización", "topografía", "habitaciones", "rooms",
+            "áreas", "areas", "ocupacion", "sup.libre", "sup.construida",
+            "almacén", "salón", "cocina", "aseo", "archivo", "circulación",
+            "área de trabajo", "sala de reuniones", "dep. limpieza",
+            "aseos femeninos", "aseos masculinos",
+            "aberturas", "hueco", "opening", "void", "corte", "líneas", "lines",
+            "materiales", "materials", "tubería", "pipe", "segmentos",
+            "system panel", "empty panel"
         ]
         text_check = (str(desc) + " " + str(code)).lower()
-        for term in ignore_terms:
-            if term in text_check: return True
-        return False
+        return any(t in text_check for t in ignore_terms)
+
+    def find_matching_code(self, bc3_code, bc3_desc, ifc_descriptions, threshold=0.5):
+        """Busca en IFC un código con descripción similar. Si hay empate, prefiere código numéricamente cercano."""
+        matches = []
+        
+        for ifc_code, ifc_desc in ifc_descriptions.items():
+            score = calc_similarity(bc3_desc, ifc_desc)
+            if score >= threshold:
+                matches.append((ifc_code, score))
+        
+        if not matches:
+            return None, 0
+        
+        # Si solo hay un match, devolverlo
+        if len(matches) == 1:
+            return matches[0]
+        
+        # Si hay múltiples matches con el mismo score, desempatar por cercanía numérica
+        max_score = max(m[1] for m in matches)
+        top_matches = [m for m in matches if m[1] == max_score]
+        
+        if len(top_matches) == 1:
+            return top_matches[0]
+        
+        # Desempatar por cercanía numérica al código BC3
+        try:
+            bc3_num = int(bc3_code)
+            best = min(top_matches, key=lambda m: abs(int(m[0]) - bc3_num))
+            return best
+        except:
+            return top_matches[0]
 
     def run_comparison(self):
         bc3_path = self.path_bc3.get()
@@ -196,109 +238,146 @@ class ComparadorBIMApp:
             messagebox.showwarning("Aviso", "Selecciona ambos archivos.")
             return
 
+        # Parsear archivos
         bc3_data = BC3Parser(bc3_path).parse()
-        bc3_keys = set(bc3_data.keys())
-        ifc_counts, ifc_guids = IFCParser(ifc_path).parse(valid_bc3_codes=bc3_keys)
+        ifc_counts, ifc_descriptions = IFCParser(ifc_path).parse()
 
         discrepancias = []
         coincidencias = []
-        all_codes = set(bc3_data.keys()) | set(ifc_counts.keys())
 
-        for code in all_codes:
+        for code, info in bc3_data.items():
             if not code or len(code) > 40: continue
-
-            bc3_info = bc3_data.get(code, {'quantity': 0, 'unit': '-', 'desc': '-', 'guid': None})
-            qty_bc3 = bc3_info['quantity']
-            unit = bc3_info['unit']
-            desc = bc3_info['desc']
-            bc3_guid = bc3_info.get('guid')
+            if not info['unit']: continue
             
-            qty_ifc = ifc_counts.get(code, 0)
-
-            # Recuperación por GUID si existe
-            if qty_ifc == 0 and bc3_guid and bc3_guid in ifc_guids:
-                qty_ifc = 1 
-
-            # --- FILTROS ---
-            if qty_bc3 == 0 and qty_ifc == 0: continue
+            desc = info['desc']
+            unit = info['unit']
+            qty_bc3 = info['quantity']
+            
             if self.is_ignored_item(code, desc): continue
-            if code not in bc3_data and (":" in code or len(code) > 20 or (code.isdigit() and len(code)>5)):
-                continue
-
+            if qty_bc3 == 0: continue
+            
+            code_in_ifc = code in ifc_counts
+            ifc_count = ifc_counts.get(code, 0)
+            
             status = "OK"
             msg = ""
+            codigo_ifc = code if code_in_ifc else "-"
 
-            if code not in bc3_data:
-                status = "MISSING_IN_BC3"
-                msg = "En IFC pero no en Presupuesto"
-            elif qty_ifc == 0:
-                status = "MISSING_IN_IFC"
-                msg = "En Presupuesto pero no en IFC"
-            else:
-                is_count = unit.lower() in ['u', 'ud', 'un', 'pza', 'ut']
-                if is_count:
-                    if abs(qty_bc3 - qty_ifc) > 0.1:
-                        status = "QTY_MISMATCH"
-                        msg = f"Diferencia: BC3={qty_bc3} vs IFC={qty_ifc}"
+            if not code_in_ifc:
+                # Buscar por descripción similar
+                matching_code, score = self.find_matching_code(code, desc, ifc_descriptions)
+                
+                if matching_code:
+                    status = "CODIGO_DIFERENTE"
+                    codigo_ifc = matching_code
+                    ifc_count = ifc_counts.get(matching_code, 0)
+                    msg = f"BC3 usa '{code}' pero IFC usa '{matching_code}'"
+                    
+                    # También verificar cantidad si es unidad de conteo
+                    if unit.lower() in ['u', 'ud', 'un', 'pza', 'ut']:
+                        if abs(qty_bc3 - ifc_count) > 0.5:
+                            msg += f" | Cantidad también difiere: BC3={int(qty_bc3)} vs IFC={ifc_count}"
                 else:
-                    msg = f"Info: {unit} vs Count ({qty_ifc})"
+                    status = "CODIGO_NO_EN_IFC"
+                    msg = f"Código '{code}' no encontrado en IFC (sin match por descripción)"
+            else:
+                # Código existe en ambos - verificar cantidad
+                is_count_unit = unit.lower() in ['u', 'ud', 'un', 'pza', 'ut']
+                if is_count_unit:
+                    if abs(qty_bc3 - ifc_count) > 0.5:
+                        status = "CANTIDAD_DIFERENTE"
+                        msg = f"BC3: {int(qty_bc3)} {unit} | IFC: {ifc_count} instancias"
+                    else:
+                        msg = f"OK: {int(qty_bc3)} {unit}"
+                else:
+                    msg = f"Código presente en ambos"
 
-            row = {'CODI': code, 'DESC': desc, 'UNIDAD': unit, 'VALOR_BC3': qty_bc3, 'VALOR_IFC': qty_ifc, 'ESTADO': status, 'MENSAJE': msg}
+            row = {
+                'CODIGO_BC3': code,
+                'CODIGO_IFC': codigo_ifc,
+                'DESCRIPCION': desc,
+                'UNIDAD': unit,
+                'CANT_BC3': qty_bc3,
+                'CANT_IFC': ifc_count if codigo_ifc != "-" else "-",
+                'ESTADO': status,
+                'DETALLE': msg
+            }
 
             if status == "OK":
                 coincidencias.append(row)
             else:
                 discrepancias.append(row)
 
+        self.export_results(discrepancias, coincidencias, ifc_path)
+
+    def export_results(self, discrepancias, coincidencias, ifc_path):
         try:
-            ifc_filename = os.path.basename(ifc_path)
-            base_name = os.path.splitext(ifc_filename)[0]
-            output_file = f"{base_name}_excel.xlsx"
+            base_name = os.path.splitext(os.path.basename(ifc_path))[0]
+            output_file = f"{base_name}_comparacion.xlsx"
             
             with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
                 green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
                 red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
                 yellow_fill = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')
+                orange_fill = PatternFill(start_color='FFD966', end_color='FFD966', fill_type='solid')
                 success_fill = PatternFill(start_color='00B050', end_color='00B050', fill_type='solid')
                 white_font = Font(color="FFFFFF", bold=True)
-                center_align = Alignment(horizontal='center', vertical='center')
+                bold_font = Font(bold=True)
 
                 if not discrepancias:
-                    df_success = pd.DataFrame({'RESULTADO': ["NO EXISTE NINGUNA DISCREPANCIA IMPORTANTE"]})
+                    df_success = pd.DataFrame({'RESULTADO': ["✓ NO EXISTE NINGUNA DISCREPANCIA"]})
                     df_success.to_excel(writer, sheet_name='Resumen', index=False)
                     ws = writer.sheets['Resumen']
-                    cell = ws['A2']
-                    cell.fill = success_fill
-                    cell.font = white_font
-                    cell.alignment = center_align
-                    ws.column_dimensions['A'].width = 60
+                    ws['A2'].fill = success_fill
+                    ws['A2'].font = white_font
+                    ws.column_dimensions['A'].width = 50
                 else:
                     df_disc = pd.DataFrame(discrepancias)
-                    status_priority = {'MISSING_IN_BC3': 1, 'MISSING_IN_IFC': 1, 'QTY_MISMATCH': 2}
-                    df_disc['Sort'] = df_disc['ESTADO'].map(status_priority)
-                    df_disc = df_disc.sort_values('Sort').drop('Sort', axis=1)
+                    priority = {'CODIGO_DIFERENTE': 0, 'CANTIDAD_DIFERENTE': 1, 'CODIGO_NO_EN_IFC': 2}
+                    df_disc['_sort'] = df_disc['ESTADO'].map(lambda x: priority.get(x, 99))
+                    df_disc = df_disc.sort_values('_sort').drop('_sort', axis=1)
                     
                     df_disc.to_excel(writer, sheet_name='Discrepancias', index=False)
                     ws = writer.sheets['Discrepancias']
+                    
                     for row_idx, row_data in enumerate(df_disc.itertuples(), start=2):
                         st = row_data.ESTADO
-                        fill = red_fill if st == 'QTY_MISMATCH' else yellow_fill
+                        if st == 'CODIGO_DIFERENTE':
+                            fill = orange_fill
+                        elif st == 'CANTIDAD_DIFERENTE':
+                            fill = red_fill
+                        else:
+                            fill = yellow_fill
                         for col_idx in range(1, len(df_disc.columns) + 1):
                             ws.cell(row=row_idx, column=col_idx).fill = fill
-                
+                    
+                    for col_idx in range(1, len(df_disc.columns) + 1):
+                        ws.cell(row=1, column=col_idx).font = bold_font
+                    
+                    ws.column_dimensions['A'].width = 12
+                    ws.column_dimensions['B'].width = 12
+                    ws.column_dimensions['C'].width = 50
+                    ws.column_dimensions['H'].width = 55
+
                 if coincidencias:
                     df_match = pd.DataFrame(coincidencias)
-                    df_match.to_excel(writer, sheet_name='Coincidencias (Matches)', index=False)
-                    ws_match = writer.sheets['Coincidencias (Matches)']
+                    df_match.to_excel(writer, sheet_name='Coincidencias', index=False)
+                    ws_match = writer.sheets['Coincidencias']
                     for row_idx in range(2, len(df_match) + 2):
                         for col_idx in range(1, len(df_match.columns) + 1):
                             ws_match.cell(row=row_idx, column=col_idx).fill = green_fill
 
-            messagebox.showinfo("Éxito", f"Reporte generado: {output_file}")
-            os.startfile(output_file) if os.name == 'nt' else None
+            msg = f"Reporte: {output_file}\n\n"
+            msg += f"🔴 Discrepancias: {len(discrepancias)}\n"
+            msg += f"🟢 Coincidencias: {len(coincidencias)}"
+            
+            messagebox.showinfo("Completado", msg)
+            if os.name == 'nt':
+                os.startfile(output_file)
 
         except Exception as e:
-            messagebox.showerror("Error Exportación", str(e))
+            messagebox.showerror("Error", str(e))
+
 
 if __name__ == "__main__":
     root = tk.Tk()
