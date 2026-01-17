@@ -86,13 +86,11 @@ if command -v wine &> /dev/null; then
         # Suppress Wine debug messages
         export WINEDEBUG=-all
 
+        # Use spec file for consistent builds with logo and optimizations
         wine "$WINE_PYTHON" -m PyInstaller \
             --clean \
             --noconfirm \
-            --name ConflictFlaggerAEC \
-            --windowed \
-            --onedir \
-            src/app_comparator.py 2>&1 | grep -E "(INFO: Build|ERROR|Building|completed)"
+            conflict_flagger.spec 2>&1 | grep -E "(INFO: Build|ERROR|Building|completed)"
 
         if [ -f "dist/ConflictFlaggerAEC/ConflictFlaggerAEC.exe" ]; then
             print_status "Windows build complete: dist/ConflictFlaggerAEC/"

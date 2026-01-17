@@ -24,15 +24,9 @@ echo Cleaning previous builds...
 rmdir /s /q build\ConflictFlaggerAEC 2>nul
 rmdir /s /q dist\ConflictFlaggerAEC 2>nul
 
-REM Build
+REM Build using spec file (includes logo and optimizations)
 echo Building Windows executable...
-python -m PyInstaller ^
-    --clean ^
-    --noconfirm ^
-    --name ConflictFlaggerAEC ^
-    --windowed ^
-    --onedir ^
-    src\app_comparator.py
+python -m PyInstaller --clean --noconfirm conflict_flagger.spec
 
 if errorlevel 1 (
     echo Build failed!

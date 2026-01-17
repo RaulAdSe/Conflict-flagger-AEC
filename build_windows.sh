@@ -30,15 +30,12 @@ echo "Using Wine Python: $WINE_PYTHON"
 echo "Cleaning previous builds..."
 rm -rf build/ConflictFlaggerAEC dist/ConflictFlaggerAEC 2>/dev/null || true
 
-# Build
+# Build using spec file (includes logo and optimizations)
 echo "Building Windows executable..."
 wine "$WINE_PYTHON" -m PyInstaller \
     --clean \
     --noconfirm \
-    --name ConflictFlaggerAEC \
-    --windowed \
-    --onedir \
-    src/app_comparator.py
+    conflict_flagger.spec
 
 echo ""
 echo "=========================================="
