@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, TYPE_CHECKING
 
-from src.matching.matcher import MatchedPair, MatchResult
+from src.matching.matcher import MatchedPair, MatchResult, MatchMethod
 
 # Import PhaseConfig only for type checking to avoid circular imports
 if TYPE_CHECKING:
@@ -27,13 +27,18 @@ if TYPE_CHECKING:
 
 class ConflictType(Enum):
     """Type of conflict detected."""
-    MISSING_IN_BC3 = "missing_in_bc3"  # Element only in IFC
-    MISSING_IN_IFC = "missing_in_ifc"  # Element only in BC3
+    # Phase 1: Basic matching conflicts
+    MISSING_IN_BC3 = "missing_in_bc3"  # Element only in IFC (sin presupuestar)
+    MISSING_IN_IFC = "missing_in_ifc"  # Element only in BC3 (sin modelar)
+    CODE_MISMATCH = "code_mismatch"  # Matched by description, codes differ
+    QUANTITY_MISMATCH = "quantity_mismatch"  # Quantity values differ
+    UNIT_MISMATCH = "unit_mismatch"  # Unit of measure differs
+
+    # Phase 2: Property conflicts
     PROPERTY_MISMATCH = "property_mismatch"  # Different property values
     PROPERTY_MISSING_IFC = "property_missing_ifc"  # Property only in BC3
     PROPERTY_MISSING_BC3 = "property_missing_bc3"  # Property only in IFC
     NAME_MISMATCH = "name_mismatch"  # Family/Type name differs
-    QUANTITY_MISMATCH = "quantity_mismatch"  # Quantity values differ
 
 
 class ConflictSeverity(Enum):
@@ -74,9 +79,14 @@ class ComparisonResult:
 
     conflicts: list  # List of Conflict objects
 
-    # Counts by type
-    missing_in_bc3: int = 0
-    missing_in_ifc: int = 0
+    # Counts by type - Phase 1
+    missing_in_bc3: int = 0  # Sin presupuestar
+    missing_in_ifc: int = 0  # Sin modelar
+    code_mismatches: int = 0
+    quantity_mismatches: int = 0
+    unit_mismatches: int = 0
+
+    # Counts by type - Phase 2
     property_mismatches: int = 0
     total_properties_compared: int = 0
 
@@ -104,9 +114,15 @@ class ComparisonResult:
             "total_conflicts": len(self.conflicts),
             "errors": len(self.get_conflicts_by_severity(ConflictSeverity.ERROR)),
             "warnings": len(self.get_conflicts_by_severity(ConflictSeverity.WARNING)),
+            # Phase 1
             "missing_in_bc3": self.missing_in_bc3,
             "missing_in_ifc": self.missing_in_ifc,
+            "code_mismatches": self.code_mismatches,
+            "quantity_mismatches": self.quantity_mismatches,
+            "unit_mismatches": self.unit_mismatches,
+            # Phase 2
             "property_mismatches": self.property_mismatches,
+            # Summary
             "total_matched": self.total_matched,
             "total_with_conflicts": self.total_with_conflicts
         }
@@ -211,11 +227,20 @@ class Comparator:
 
         return ComparisonResult(
             conflicts=conflicts,
+            # Phase 1 counts
             missing_in_bc3=len(match_result.ifc_only),
             missing_in_ifc=len(match_result.bc3_only),
+            code_mismatches=len([c for c in conflicts
+                                if c.conflict_type == ConflictType.CODE_MISMATCH]),
+            quantity_mismatches=len([c for c in conflicts
+                                    if c.conflict_type == ConflictType.QUANTITY_MISMATCH]),
+            unit_mismatches=len([c for c in conflicts
+                                if c.conflict_type == ConflictType.UNIT_MISMATCH]),
+            # Phase 2 counts
             property_mismatches=len([c for c in conflicts
                                     if c.conflict_type == ConflictType.PROPERTY_MISMATCH]),
             total_properties_compared=total_props_compared,
+            # Summary
             total_matched=len(match_result.matched),
             total_with_conflicts=len(codes_with_conflicts),
             errors=errors
@@ -241,6 +266,52 @@ class Comparator:
 
         bc3 = pair.bc3_element
         ifc = pair.ifc_type
+
+        # =================================================================
+        # PHASE 1 CHECKS: Code, Quantity, Unit (always performed)
+        # =================================================================
+
+        # Check for code mismatch (matched by description = different codes)
+        if pair.method == MatchMethod.DESCRIPTION:
+            ifc_code = ifc.tag or "?"
+            bc3_code = bc3.code or "?"
+            if ifc_code != bc3_code:
+                conflicts.append(Conflict(
+                    conflict_type=ConflictType.CODE_MISMATCH,
+                    severity=ConflictSeverity.ERROR,
+                    code=bc3_code,
+                    element_name=pair.name,
+                    property_name="Código",
+                    ifc_value=ifc_code,
+                    bc3_value=bc3_code,
+                    message=f"Códigos diferentes: IFC usa '{ifc_code}', BC3 usa '{bc3_code}'"
+                ))
+
+        # Check for quantity mismatch
+        # BC3 has quantity, IFC types have instance_count
+        bc3_qty = bc3.quantity if hasattr(bc3, 'quantity') and bc3.quantity else 0
+        ifc_qty = ifc.instance_count if hasattr(ifc, 'instance_count') and ifc.instance_count else 0
+
+        # Only compare if both have quantities and unit is countable
+        if bc3_qty > 0 and ifc_qty > 0:
+            unit = bc3.unit.lower() if bc3.unit else ""
+            is_countable = unit in ['u', 'ud', 'un', 'pza', 'ut', 'unidad', 'unidades']
+
+            if is_countable and abs(bc3_qty - ifc_qty) > self.tolerance:
+                conflicts.append(Conflict(
+                    conflict_type=ConflictType.QUANTITY_MISMATCH,
+                    severity=ConflictSeverity.ERROR,
+                    code=pair.code,
+                    element_name=pair.name,
+                    property_name="Cantidad",
+                    ifc_value=ifc_qty,
+                    bc3_value=bc3_qty,
+                    message=f"Cantidad difiere: BC3={bc3_qty} {bc3.unit}, IFC={ifc_qty} instancias"
+                ))
+
+        # =================================================================
+        # END PHASE 1 CHECKS
+        # =================================================================
 
         # Compare names if enabled
         if self.compare_names:
