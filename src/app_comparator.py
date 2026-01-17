@@ -2,7 +2,7 @@
 Conflict Flagger AEC - Main Application
 
 A modern desktop application for comparing IFC building models with BC3 budgets.
-Features a macOS-style UI with drag & drop support and phase-based analysis.
+Features a macOS-style UI with drag & drop support.
 
 ARCHITECTURE:
 =============
@@ -11,15 +11,12 @@ This app uses a modular pipeline:
               ├─> Parsers ─> Matcher ─> Comparator ─> Reporter ─> Excel
     BC3 File ─┘
 
-Each component is independent and configurable via PhaseConfig.
-This allows different analysis depths without code duplication.
+REPORT TYPES:
+=============
+- Informe Simple: Only Resumen + Discrepancias sheets
+- Informe Completo: All sheets (matched, missing, element summary)
 
-PHASES:
-=======
-- QUICK_CHECK: Fast validation (codes, units, quantities)
-- FULL_ANALYSIS: Comprehensive comparison (all properties)
-
-See src/phases/config.py for phase definitions.
+The analysis always uses FULL_ANALYSIS phase for comprehensive comparison.
 """
 
 # CRITICAL: Early setup for frozen executables (PyInstaller on Windows/Wine)
@@ -68,7 +65,7 @@ try:
     from src.matching.matcher import Matcher
     from src.comparison.comparator import Comparator
     from src.reporting.reporter import Reporter
-    from src.phases.config import Phase, PHASES, get_phase_config
+    from src.phases.config import Phase, get_phase_config
 except ImportError:
     # Standalone mode (PyInstaller build)
     from parsers.ifc_parser import IFCParser
@@ -76,7 +73,7 @@ except ImportError:
     from matching.matcher import Matcher
     from comparison.comparator import Comparator
     from reporting.reporter import Reporter
-    from phases.config import Phase, PHASES, get_phase_config
+    from phases.config import Phase, get_phase_config
 
 
 class ModernUploadZone(tk.Canvas):
@@ -441,9 +438,9 @@ class ConflictFlaggerApp:
     """
     Main application with modern macOS-style UI.
 
-    Supports phase-based analysis:
-    - Quick Check: Fast validation of codes, units, quantities
-    - Full Analysis: Comprehensive property comparison
+    Supports two report types:
+    - Informe Simple: Summary + Discrepancies sheets only
+    - Informe Completo: All sheets (matched elements, missing items, etc.)
     """
 
     def __init__(self, root):
@@ -466,8 +463,8 @@ class ConflictFlaggerApp:
         self.path_ifc = tk.StringVar()
         self.path_bc3 = tk.StringVar()
 
-        # Phase selection (default to Full Analysis)
-        self.selected_phase = tk.StringVar(value=Phase.FULL_ANALYSIS.value)
+        # Report type selection (default to Complete)
+        self.report_type = tk.StringVar(value="complete")
 
         # Configure root background
         self.root.configure(bg=self.bg_color)
@@ -580,8 +577,8 @@ class ConflictFlaggerApp:
         )
         self.bc3_zone.pack(side="right", padx=(10, 10))
 
-        # Phase selector
-        self._build_phase_selector(content, font_family)
+        # Report type selector
+        self._build_report_type_selector(content, font_family)
 
         # Arrow divider
         arrow_frame = tk.Frame(content, bg=self.card_color, height=30)
@@ -613,35 +610,38 @@ class ConflictFlaggerApp:
         )
         self.status_label.pack(pady=(15, 0))
 
-    def _build_phase_selector(self, parent, font_family):
+    def _build_report_type_selector(self, parent, font_family):
         """
-        Build the phase selection UI.
+        Build the report type selection UI.
 
-        This allows users to choose between Quick Check and Full Analysis.
-        The phase determines what comparisons are performed and how results
-        are reported.
+        Users can choose between:
+        - Informe Simple: Only Summary and Discrepancies sheets
+        - Informe Completo: All sheets
         """
-        phase_frame = tk.Frame(parent, bg=self.card_color)
-        phase_frame.pack(fill="x", pady=(0, 8))
+        report_frame = tk.Frame(parent, bg=self.card_color)
+        report_frame.pack(fill="x", pady=(0, 8))
 
-        # Phase label
-        phase_label = tk.Label(
-            phase_frame,
-            text="Tipus d'anàlisi:",
+        # Report type label
+        report_label = tk.Label(
+            report_frame,
+            text="Tipus d'informe:",
             font=(font_family, 12),
             bg=self.card_color,
             fg=self.text_secondary
         )
-        phase_label.pack(side="left", padx=(10, 15))
+        report_label.pack(side="left", padx=(10, 15))
 
-        # Radio buttons for phase selection
-        for phase in Phase:
-            config = PHASES[phase]
+        # Radio buttons for report type selection
+        report_types = [
+            ("simple", "Informe Simple"),
+            ("complete", "Informe Complet")
+        ]
+        for value, label in report_types:
             rb = tk.Radiobutton(
-                phase_frame,
-                text=config.name,
-                variable=self.selected_phase,
-                value=phase.value,
+                report_frame,
+                text=label,
+                variable=self.report_type,
+                value=value,
                 font=(font_family, 12),
                 bg=self.card_color,
                 fg=self.text_primary,
@@ -749,32 +749,28 @@ class ConflictFlaggerApp:
         # Ultimate fallback: home directory
         return Path.home()
 
-    def _get_selected_phase(self) -> Phase:
-        """Get the currently selected analysis phase."""
-        phase_value = self.selected_phase.get()
-        for phase in Phase:
-            if phase.value == phase_value:
-                return phase
-        return Phase.FULL_ANALYSIS  # Default fallback
-
     def generate_excel_report(self):
         """
         Generate the Excel comparison report using the backend pipeline.
 
-        The analysis depth depends on the selected phase:
-        - QUICK_CHECK: Fast validation of codes, units, quantities
-        - FULL_ANALYSIS: Comprehensive property comparison
+        Always uses FULL_ANALYSIS phase. Report type controls which sheets:
+        - simple: Only Resumen + Discrepancias
+        - complete: All sheets
         """
         if not self.path_ifc.get() or not self.path_bc3.get():
             messagebox.showwarning("Warning", "Please select both files.")
             return
 
-        # Get selected phase and its configuration
-        phase = self._get_selected_phase()
+        # Always use FULL_ANALYSIS phase
+        phase = Phase.FULL_ANALYSIS
         phase_config = get_phase_config(phase)
 
-        self._set_status(f"Starting {phase_config.name}...")
-        self.download_btn.set_text("Processing...")
+        # Get report type
+        report_type = self.report_type.get()  # "simple" or "complete"
+        report_label = "Informe Simple" if report_type == "simple" else "Informe Complet"
+
+        self._set_status(f"Generant {report_label}...")
+        self.download_btn.set_text("Processant...")
         self.download_btn.set_active(False)
 
         try:
@@ -817,28 +813,29 @@ class ConflictFlaggerApp:
             self._set_status(f"Conflicts: {summary['total_conflicts']}")
             self.root.update()
 
-            # 5. Generate report using Reporter (configured by phase)
-            self._set_status("Generating Excel report...")
+            # 5. Generate report using Reporter (configured by report type)
+            self._set_status("Generant informe Excel...")
             self.root.update()
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            phase_suffix = "quick" if phase == Phase.QUICK_CHECK else "full"
-            output_path = output_dir / f"Report_AEC_{phase_suffix}_{timestamp}.xlsx"
+            type_suffix = "simple" if report_type == "simple" else "complet"
+            output_path = output_dir / f"Report_AEC_{type_suffix}_{timestamp}.xlsx"
 
             reporter = Reporter()
             report_path = reporter.generate_report(
                 match_result,
                 comparison_result,
                 output_path,
-                phase_config=phase_config
+                phase_config=phase_config,
+                report_type=report_type
             )
 
-            self._set_status(f"Report saved successfully")
+            self._set_status(f"Informe guardat correctament")
 
             # Show success message with summary (in Catalan)
             messagebox.showinfo(
                 "Informe Generat",
                 f"L'informe s'ha generat correctament!\n\n"
-                f"Tipus d'anàlisi: {phase_config.name}\n\n"
+                f"Tipus d'informe: {report_label}\n\n"
                 f"Emparellats: {len(match_result.matched)} elements\n"
                 f"Nomes a IFC (sense pressupostar): {len(match_result.ifc_only)}\n"
                 f"Nomes a BC3 (sense modelar): {len(match_result.bc3_only)}\n\n"
