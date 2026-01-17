@@ -1,32 +1,51 @@
 @echo off
-REM Build script for Windows - Creates ConflictFlaggerAEC.exe
-REM Run this from the project root directory
+REM Build Windows .exe natively on Windows
+REM Usage: build_windows.bat
 
-echo ====================================================
-echo Conflict Flagger AEC - Windows Build Script
-echo ====================================================
+echo ==========================================
+echo Conflict Flagger AEC - Windows Build
+echo ==========================================
 
 REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: Python is not installed or not in PATH
-    pause
+    echo Error: Python is not installed or not in PATH.
+    echo Download from: https://www.python.org/downloads/
     exit /b 1
 )
 
-REM Install dependencies
-echo.
+REM Install dependencies if needed
 echo Installing dependencies...
-pip install -r requirements.txt
-pip install pyinstaller
+pip install --upgrade pip
+pip install pyinstaller openpyxl pillow tkinterdnd2 ifcopenshell
 
-REM Build the application
-echo.
+REM Clean previous builds
+echo Cleaning previous builds...
+rmdir /s /q build\ConflictFlaggerAEC 2>nul
+rmdir /s /q dist\ConflictFlaggerAEC 2>nul
+
+REM Build
 echo Building Windows executable...
-python build_app.py --clean
+python -m PyInstaller ^
+    --clean ^
+    --noconfirm ^
+    --name ConflictFlaggerAEC ^
+    --windowed ^
+    --onedir ^
+    src\app_comparator.py
+
+if errorlevel 1 (
+    echo Build failed!
+    exit /b 1
+)
 
 echo.
-echo ====================================================
-echo Build complete! Check dist\ConflictFlaggerAEC.exe
-echo ====================================================
+echo ==========================================
+echo BUILD SUCCESSFUL!
+echo ==========================================
+echo.
+echo Windows executable: dist\ConflictFlaggerAEC\ConflictFlaggerAEC.exe
+echo.
+echo To distribute, copy the entire ConflictFlaggerAEC folder.
+
 pause
