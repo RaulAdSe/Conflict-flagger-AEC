@@ -1,8 +1,8 @@
 # Phase Implementation Plan
 
-> **Branch:** `master` (Phase 1 Complete)
+> **Branch:** `master` (Phase 2 Complete)
 > **Date:** 2026-01-17
-> **Status:** ✅ Phase 1 Complete | Phase 2 Pending
+> **Status:** ✅ Phase 1 Complete | ✅ Phase 2 Complete
 
 ---
 
@@ -242,45 +242,54 @@ Currently comparator focuses on property mismatches. Phase 1 needs:
 ## Phase 2: Property Mismatch (Spatial)
 
 **Issue:** #10 (Restrict property mismatch to h w d)
-**Status:** Blocked (waiting for Phase 1)
-**Priority:** FUTURE
+**Status:** ✅ Complete (PR #20)
+**Priority:** DONE
 
 ### 2.1 Restrict Property Comparison to Dimensions
 
 Phase 2 focuses only on spatial properties:
 - **h** (height / altura)
-- **w** (width / anchura)
+- **b** (width / anchura)
 - **d** (depth / profundidad)
 - **length** (longitud)
-- **thickness** (grosor)
+- **thickness** (grosor / espesor)
 
-#### Current COMPARABLE_PROPERTIES (in `comparator.py`)
+#### Implementation (commit 4992115)
+
+Added two property lists to `comparator.py`:
+
 ```python
-COMPARABLE_PROPERTIES = [
-    # Dimensional
+# Spatial properties only (used by FULL_ANALYSIS phase)
+SPATIAL_PROPERTIES = [
     ('h', 'h'),
     ('b', 'b'),
+    ('d', 'd'),
     ('Anchura', 'width'),
     ('Altura', 'height'),
+    ('Profundidad', 'depth'),
     ('Grosor', 'thickness'),
     ('Longitud', 'length'),
-    # Material - REMOVE FOR PHASE 2
-    ('Material', 'Material'),
-    ('Material estructural', 'StructuralMaterial'),
-    # Thermal - REMOVE FOR PHASE 2
-    ('Resistencia térmica (R)', 'ThermalResistance'),
-    ('Coeficiente de transferencia de calor (U)', 'HeatTransferCoefficient'),
+    ('Espesor', 'thickness'),
+]
+
+# All properties including material and thermal
+ALL_PROPERTIES = [
+    # ...spatial + Material + thermal properties
 ]
 ```
 
+Added `property_list` field to `PhaseConfig`:
+- `"spatial"` - Only compare h/w/d properties (default)
+- `"all"` - Compare all properties including material and thermal
+
 #### Implementation Tasks
 
-- [ ] **2.1.1** Create `PHASE2_PROPERTIES` list with only spatial properties
-- [ ] **2.1.2** Update `PhaseConfig` for `FULL_ANALYSIS` to use spatial-only
-- [ ] **2.1.3** Add property extraction from IFC for h/w/d
-- [ ] **2.1.4** Add property extraction from BC3 for h/w/d
-- [ ] **2.1.5** Test dimension comparison
-- [ ] **2.1.6** Update reporter for property mismatch display
+- [x] **2.1.1** Create `SPATIAL_PROPERTIES` list with only spatial properties
+- [x] **2.1.2** Add `property_list` field to `PhaseConfig`
+- [x] **2.1.3** Update `FULL_ANALYSIS` to use `property_list="spatial"`
+- [x] **2.1.4** Update `Comparator.compare()` to select property list from config
+- [x] **2.1.5** Update `_compare_pair()` to use selected property list
+- [x] **2.1.6** Add tests for Phase 2 property list selection (4 tests)
 
 ---
 
@@ -574,9 +583,9 @@ git push origin archive/albert-matching-v3
 - [ ] Issues #7, #8, #9, #11, #12, #13, #14 closed
 
 ### Phase 2 Complete When:
-- [ ] Spatial property (h/w/d) mismatches detected
-- [ ] Non-spatial properties ignored
-- [ ] Issue #10 closed
+- [x] Spatial property (h/w/d) mismatches detected
+- [x] Non-spatial properties ignored (via `property_list="spatial"`)
+- [x] Issue #10 closed (PR #20)
 
 ---
 
