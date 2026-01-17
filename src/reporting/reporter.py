@@ -362,18 +362,25 @@ class Reporter:
         ws.row_dimensions[1].height = 25
 
         # Filter conflicts
-        conflicts = comparison_result.conflicts
+        # Exclude MISSING_IN_BC3 and MISSING_IN_IFC - these have dedicated sheets
+        conflicts = [c for c in comparison_result.conflicts
+                     if c.conflict_type not in (ConflictType.MISSING_IN_BC3, ConflictType.MISSING_IN_IFC)]
         if not self.config.show_info_conflicts:
             conflicts = [c for c in conflicts if c.severity != ConflictSeverity.INFO]
 
-        # Sort conflicts: errors first, then warnings, then by code (Issue #9)
+        # Sort conflicts by color: red first, then orange, then yellow (Issue #9)
+        # Red = ERROR (not code mismatch), Orange = CODE_MISMATCH, Yellow = WARNING
         def conflict_sort_key(c):
-            severity_order = {
-                ConflictSeverity.ERROR: 0,
-                ConflictSeverity.WARNING: 1,
-                ConflictSeverity.INFO: 2
-            }
-            return (severity_order.get(c.severity, 3), c.code or "")
+            # Determine color-based order
+            if c.severity == ConflictSeverity.ERROR and c.conflict_type != ConflictType.CODE_MISMATCH:
+                color_order = 0  # Red first
+            elif c.conflict_type == ConflictType.CODE_MISMATCH:
+                color_order = 1  # Orange second
+            elif c.severity == ConflictSeverity.WARNING:
+                color_order = 2  # Yellow third
+            else:
+                color_order = 3  # Info/other last
+            return (color_order, c.code or "")
 
         conflicts = sorted(conflicts, key=conflict_sort_key)
 

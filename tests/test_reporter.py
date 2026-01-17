@@ -202,7 +202,12 @@ class TestReporter:
             assert "INFORME DE COMPARACION IFC - BC3" in ws["A1"].value
 
     def test_conflicts_sheet_has_data(self, reporter, sample_match_result, sample_comparison_result):
-        """Test conflicts sheet has data rows."""
+        """Test conflicts sheet has data rows.
+
+        Note: MISSING_IN_BC3 and MISSING_IN_IFC are NOT shown in Discrepancias.
+        They have dedicated sheets (Sin Presupuestar, Sin Modelar).
+        Only PROPERTY_MISMATCH, CODE_MISMATCH, QUANTITY_MISMATCH, etc. appear here.
+        """
         from openpyxl import load_workbook
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -217,8 +222,9 @@ class TestReporter:
             wb = load_workbook(output_path)
             ws = wb["Discrepancias"]  # Spanish name
 
-            # Should have header row + 3 conflict rows
-            assert ws.max_row >= 4
+            # Should have header row + 1 conflict row (only PROPERTY_MISMATCH)
+            # MISSING_IN_BC3 and MISSING_IN_IFC are excluded from this sheet
+            assert ws.max_row >= 2
 
     def test_generate_json_report(self, reporter, sample_match_result, sample_comparison_result):
         """Test generating a JSON report (in Spanish)."""
