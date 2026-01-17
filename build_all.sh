@@ -86,15 +86,15 @@ if command -v wine &> /dev/null; then
         # Suppress Wine debug messages
         export WINEDEBUG=-all
 
-        # Use spec file for consistent builds with logo and optimizations
+        # Build single-file .exe using onefile spec
         wine "$WINE_PYTHON" -m PyInstaller \
             --clean \
             --noconfirm \
-            conflict_flagger.spec 2>&1 | grep -E "(INFO: Build|ERROR|Building|completed)"
+            conflict_flagger_onefile.spec 2>&1 | grep -E "(INFO: Build|ERROR|Building|completed)"
 
-        if [ -f "dist/ConflictFlaggerAEC/ConflictFlaggerAEC.exe" ]; then
-            print_status "Windows build complete: dist/ConflictFlaggerAEC/"
-            WIN_SIZE=$(du -sh dist/ConflictFlaggerAEC | cut -f1)
+        if [ -f "dist/ConflictFlaggerAEC.exe" ]; then
+            print_status "Windows build complete: dist/ConflictFlaggerAEC.exe"
+            WIN_SIZE=$(du -sh dist/ConflictFlaggerAEC.exe | cut -f1)
             echo "    Size: $WIN_SIZE"
         else
             print_error "Windows build failed"
@@ -114,36 +114,6 @@ fi
 echo ""
 
 # ============================================
-# CREATE DISTRIBUTION PACKAGES
-# ============================================
-echo "=============================================="
-echo "  Creating Distribution Packages"
-echo "=============================================="
-echo ""
-
-# macOS: Create compressed DMG (ULMO = lzma compression)
-if [ -d "dist/Flagger.app" ]; then
-    echo "Creating macOS DMG..."
-    rm -f dist/Flagger.dmg 2>/dev/null
-    hdiutil create -volname "Flagger" -srcfolder dist/Flagger.app -ov -format ULMO dist/Flagger.dmg -quiet
-    if [ -f "dist/Flagger.dmg" ]; then
-        print_status "macOS DMG created: dist/Flagger.dmg ($(du -sh dist/Flagger.dmg | cut -f1))"
-    fi
-fi
-
-# Windows: Create compressed ZIP
-if [ -d "dist/ConflictFlaggerAEC" ]; then
-    echo "Creating Windows ZIP..."
-    rm -f dist/ConflictFlagger-Windows.zip 2>/dev/null
-    (cd dist && zip -r -9 -q ConflictFlagger-Windows.zip ConflictFlaggerAEC/)
-    if [ -f "dist/ConflictFlagger-Windows.zip" ]; then
-        print_status "Windows ZIP created: dist/ConflictFlagger-Windows.zip ($(du -sh dist/ConflictFlagger-Windows.zip | cut -f1))"
-    fi
-fi
-
-echo ""
-
-# ============================================
 # SUMMARY
 # ============================================
 echo "=============================================="
@@ -157,19 +127,10 @@ else
     print_error "macOS:   Not built"
 fi
 
-if [ -f "dist/ConflictFlaggerAEC/ConflictFlaggerAEC.exe" ]; then
-    print_status "Windows: dist/ConflictFlaggerAEC/ ($(du -sh dist/ConflictFlaggerAEC | cut -f1))"
+if [ -f "dist/ConflictFlaggerAEC.exe" ]; then
+    print_status "Windows: dist/ConflictFlaggerAEC.exe ($(du -sh dist/ConflictFlaggerAEC.exe | cut -f1))"
 else
     print_error "Windows: Not built"
-fi
-
-echo ""
-echo "Distribution packages (for sharing):"
-if [ -f "dist/Flagger.dmg" ]; then
-    print_status "macOS:   dist/Flagger.dmg ($(du -sh dist/Flagger.dmg | cut -f1))"
-fi
-if [ -f "dist/ConflictFlagger-Windows.zip" ]; then
-    print_status "Windows: dist/ConflictFlagger-Windows.zip ($(du -sh dist/ConflictFlagger-Windows.zip | cut -f1))"
 fi
 
 echo ""
