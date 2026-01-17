@@ -359,12 +359,8 @@ class Comparator:
             ifc_qty, qty_source = self._get_ifc_quantity_for_unit(ifc, unit)
 
             if ifc_qty is not None and ifc_qty > 0:
-                # Use percentage tolerance for volumetric/area comparisons
-                if unit in self.VOLUME_UNITS or unit in self.AREA_UNITS or unit in self.LINEAR_UNITS:
-                    # Use 5% tolerance for calculated quantities
-                    qty_tolerance = max(self.tolerance, bc3_qty * 0.05)
-                else:
-                    qty_tolerance = self.tolerance
+                # Use small tolerance only for floating point precision (0.01)
+                qty_tolerance = 0.01
 
                 if abs(bc3_qty - ifc_qty) > qty_tolerance:
                     conflicts.append(Conflict(
