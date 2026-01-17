@@ -114,6 +114,36 @@ fi
 echo ""
 
 # ============================================
+# CREATE DISTRIBUTION PACKAGES
+# ============================================
+echo "=============================================="
+echo "  Creating Distribution Packages"
+echo "=============================================="
+echo ""
+
+# macOS: Create compressed DMG (ULMO = lzma compression)
+if [ -d "dist/Flagger.app" ]; then
+    echo "Creating macOS DMG..."
+    rm -f dist/Flagger.dmg 2>/dev/null
+    hdiutil create -volname "Flagger" -srcfolder dist/Flagger.app -ov -format ULMO dist/Flagger.dmg -quiet
+    if [ -f "dist/Flagger.dmg" ]; then
+        print_status "macOS DMG created: dist/Flagger.dmg ($(du -sh dist/Flagger.dmg | cut -f1))"
+    fi
+fi
+
+# Windows: Create compressed ZIP
+if [ -d "dist/ConflictFlaggerAEC" ]; then
+    echo "Creating Windows ZIP..."
+    rm -f dist/ConflictFlagger-Windows.zip 2>/dev/null
+    (cd dist && zip -r -9 -q ConflictFlagger-Windows.zip ConflictFlaggerAEC/)
+    if [ -f "dist/ConflictFlagger-Windows.zip" ]; then
+        print_status "Windows ZIP created: dist/ConflictFlagger-Windows.zip ($(du -sh dist/ConflictFlagger-Windows.zip | cut -f1))"
+    fi
+fi
+
+echo ""
+
+# ============================================
 # SUMMARY
 # ============================================
 echo "=============================================="
@@ -131,6 +161,15 @@ if [ -f "dist/ConflictFlaggerAEC/ConflictFlaggerAEC.exe" ]; then
     print_status "Windows: dist/ConflictFlaggerAEC/ ($(du -sh dist/ConflictFlaggerAEC | cut -f1))"
 else
     print_error "Windows: Not built"
+fi
+
+echo ""
+echo "Distribution packages (for sharing):"
+if [ -f "dist/Flagger.dmg" ]; then
+    print_status "macOS:   dist/Flagger.dmg ($(du -sh dist/Flagger.dmg | cut -f1))"
+fi
+if [ -f "dist/ConflictFlagger-Windows.zip" ]; then
+    print_status "Windows: dist/ConflictFlagger-Windows.zip ($(du -sh dist/ConflictFlagger-Windows.zip | cut -f1))"
 fi
 
 echo ""
