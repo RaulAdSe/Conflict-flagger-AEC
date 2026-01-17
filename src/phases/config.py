@@ -84,6 +84,11 @@ class PhaseConfig:
     check_properties: bool = False  # Deep property comparison
     check_names: bool = False       # Family/type name comparison
 
+    # Property comparison settings
+    # "spatial" = only h/w/d dimensional properties (Phase 2 focus)
+    # "all" = all properties including material and thermal
+    property_list: str = "spatial"
+
     # Tolerances
     quantity_tolerance: float = 0.1
 
@@ -154,27 +159,34 @@ PHASES: dict[Phase, PhaseConfig] = {
     ),
 
     # -------------------------------------------------------------------------
-    # PHASE 2: FULL ANALYSIS (Original comprehensive check)
+    # PHASE 2: SPATIAL PROPERTY ANALYSIS
     # -------------------------------------------------------------------------
-    # Comprehensive comparison including:
-    # - All checks from Quick Check
-    # - Property-by-property comparison
-    # - Family and type name verification
-    # - Detailed reporting with all sheets
+    # Property comparison focusing on spatial/dimensional properties:
+    # - Height (h, Altura)
+    # - Width (b, Anchura)
+    # - Depth (d, Profundidad)
+    # - Thickness (Grosor, Espesor)
+    # - Length (Longitud)
     #
-    # Use case: Complete audit before project milestone
+    # Does NOT compare material or thermal properties (as per Issue #10)
+    #
+    # Use case: Verify dimensional accuracy between model and budget
     # -------------------------------------------------------------------------
     Phase.FULL_ANALYSIS: PhaseConfig(
-        name="Anàlisi Completa",
-        description="Comparació exhaustiva de totes les propietats. "
-                    "Inclou anàlisi detallada i informe complet amb totes les pestanyes.",
+        name="Fase 2: Propiedades Espaciales",
+        description="Comparación de propiedades dimensionales (h, w, d). "
+                    "Verifica altura, anchura, profundidad, grosor y longitud. "
+                    "No compara propiedades de material o térmicas.",
 
-        # Check everything
+        # Check everything including properties
         check_codes=True,
         check_units=True,
         check_quantities=True,
         check_properties=True,   # Deep property comparison
         check_names=True,        # Verify family/type names
+
+        # Use spatial properties only (Issue #10)
+        property_list="spatial",
 
         # Stricter tolerance for full analysis
         quantity_tolerance=0.01,

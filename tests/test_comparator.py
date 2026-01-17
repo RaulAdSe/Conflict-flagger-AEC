@@ -389,6 +389,135 @@ class TestComparator:
         assert summary["property_mismatches"] >= 1
 
 
+class TestPhase2PropertyListSelection:
+    """Tests for Phase 2 property list selection (Issue #10)."""
+
+    @pytest.fixture
+    def comparator(self):
+        return Comparator()
+
+    @pytest.fixture
+    def pair_with_spatial_and_material(self):
+        """Create a pair with both spatial and material property differences."""
+        bc3 = BC3Element(
+            code="TEST001",
+            unit="m",
+            description="Test element",
+            price=100.0,
+            properties={
+                "h": 2.5,        # Spatial - should be compared in spatial mode
+                "b": 0.3,        # Spatial - should be compared
+                "Material": "Concrete"  # Material - should NOT be compared in spatial mode
+            }
+        )
+
+        ifc = IFCType(
+            global_id="guid-test",
+            tag="TEST001",
+            name="Test:Element",
+            ifc_class="IfcColumnType",
+            properties={
+                "h": 2.7,        # Different from BC3 (should flag in spatial)
+                "b": 0.3,        # Same
+                "Material": "Steel"  # Different but should NOT flag in spatial mode
+            }
+        )
+
+        return MatchedPair(
+            status=MatchStatus.MATCHED,
+            method=MatchMethod.TAG,
+            ifc_type=ifc,
+            bc3_element=bc3,
+            match_key="TEST001"
+        )
+
+    def test_spatial_property_list_selected_by_default(self, comparator):
+        """Test that SPATIAL_PROPERTIES is the default property list."""
+        assert comparator._property_list == Comparator.SPATIAL_PROPERTIES
+
+    def test_phase_config_spatial_selects_spatial_properties(self, comparator, pair_with_spatial_and_material):
+        """Test that property_list='spatial' only compares spatial properties."""
+        from src.phases.config import PhaseConfig
+
+        config = PhaseConfig(
+            name="Test Phase",
+            check_properties=True,
+            property_list="spatial"  # Only compare h, w, d
+        )
+
+        match_result = MatchResult(
+            matched=[pair_with_spatial_and_material],
+            ifc_only=[],
+            bc3_only=[],
+            match_count=1
+        )
+
+        result = comparator.compare(match_result, config)
+
+        # Should detect h mismatch (2.5 vs 2.7) - spatial property
+        h_conflicts = [c for c in result.conflicts
+                      if c.property_name == "h" and c.conflict_type == ConflictType.PROPERTY_MISMATCH]
+        assert len(h_conflicts) == 1
+
+        # Should NOT detect Material mismatch - material property not in spatial list
+        material_conflicts = [c for c in result.conflicts
+                            if c.property_name == "Material" and c.conflict_type == ConflictType.PROPERTY_MISMATCH]
+        assert len(material_conflicts) == 0
+
+    def test_phase_config_all_selects_all_properties(self, comparator, pair_with_spatial_and_material):
+        """Test that property_list='all' compares all properties including material."""
+        from src.phases.config import PhaseConfig
+
+        config = PhaseConfig(
+            name="Test Phase",
+            check_properties=True,
+            property_list="all"  # Compare all properties
+        )
+
+        match_result = MatchResult(
+            matched=[pair_with_spatial_and_material],
+            ifc_only=[],
+            bc3_only=[],
+            match_count=1
+        )
+
+        result = comparator.compare(match_result, config)
+
+        # Should detect h mismatch
+        h_conflicts = [c for c in result.conflicts
+                      if c.property_name == "h" and c.conflict_type == ConflictType.PROPERTY_MISMATCH]
+        assert len(h_conflicts) == 1
+
+        # Should also detect Material mismatch with 'all' property list
+        material_conflicts = [c for c in result.conflicts
+                            if c.property_name == "Material" and c.conflict_type == ConflictType.PROPERTY_MISMATCH]
+        assert len(material_conflicts) == 1
+
+    def test_quick_check_skips_properties(self, comparator, pair_with_spatial_and_material):
+        """Test that QUICK_CHECK (check_properties=False) skips property comparison."""
+        from src.phases.config import PhaseConfig
+
+        config = PhaseConfig(
+            name="Quick Check",
+            check_properties=False,  # Skip property comparison
+            property_list="spatial"
+        )
+
+        match_result = MatchResult(
+            matched=[pair_with_spatial_and_material],
+            ifc_only=[],
+            bc3_only=[],
+            match_count=1
+        )
+
+        result = comparator.compare(match_result, config)
+
+        # Should NOT detect any property mismatches in quick check mode
+        property_conflicts = [c for c in result.conflicts
+                            if c.conflict_type == ConflictType.PROPERTY_MISMATCH]
+        assert len(property_conflicts) == 0
+
+
 class TestComparatorWithRealFiles:
     """Tests using real IFC and BC3 files."""
 

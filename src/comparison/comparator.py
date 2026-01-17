@@ -131,22 +131,48 @@ class ComparisonResult:
 class Comparator:
     """Compares matched IFC and BC3 elements to find differences."""
 
-    # Properties to compare between IFC and BC3
-    COMPARABLE_PROPERTIES = [
-        # Dimensional
-        ('h', 'h'),
-        ('b', 'b'),
+    # ==========================================================================
+    # PROPERTY LISTS FOR DIFFERENT ANALYSIS PHASES
+    # ==========================================================================
+
+    # Phase 2: Spatial properties only (h, w, d / height, width, depth)
+    # These are the dimensional properties that affect model geometry
+    SPATIAL_PROPERTIES = [
+        # Primary dimensional parameters
+        ('h', 'h'),           # Height parameter
+        ('b', 'b'),           # Width/breadth parameter
+        ('d', 'd'),           # Depth parameter
+        # Named dimensional properties (Spanish/English)
         ('Anchura', 'width'),
         ('Altura', 'height'),
+        ('Profundidad', 'depth'),
         ('Grosor', 'thickness'),
         ('Longitud', 'length'),
-        # Material
+        ('Espesor', 'thickness'),
+    ]
+
+    # Full analysis: All properties including material and thermal
+    ALL_PROPERTIES = [
+        # Dimensional (same as SPATIAL_PROPERTIES)
+        ('h', 'h'),
+        ('b', 'b'),
+        ('d', 'd'),
+        ('Anchura', 'width'),
+        ('Altura', 'height'),
+        ('Profundidad', 'depth'),
+        ('Grosor', 'thickness'),
+        ('Longitud', 'length'),
+        ('Espesor', 'thickness'),
+        # Material properties
         ('Material', 'Material'),
         ('Material estructural', 'StructuralMaterial'),
-        # Thermal
+        # Thermal properties
         ('Resistencia térmica (R)', 'ThermalResistance'),
         ('Coeficiente de transferencia de calor (U)', 'HeatTransferCoefficient'),
     ]
+
+    # Default: Use spatial properties for Phase 2 focus
+    COMPARABLE_PROPERTIES = SPATIAL_PROPERTIES
 
     def __init__(self, tolerance: float = 0.01, compare_names: bool = True):
         """
@@ -158,6 +184,10 @@ class Comparator:
         """
         self.tolerance = tolerance
         self.compare_names = compare_names
+        # Property list to use for comparison (set by phase config)
+        self._property_list = self.SPATIAL_PROPERTIES
+        # Whether to also compare same-name properties not in the list
+        self._compare_same_name_props = False
 
     def compare(self, match_result: MatchResult, phase_config: 'PhaseConfig' = None) -> ComparisonResult:
         """
@@ -186,6 +216,17 @@ class Comparator:
             # Update tolerance from phase config
             self.tolerance = phase_config.quantity_tolerance
             self.compare_names = phase_config.check_names
+            # Select property list based on phase config (Issue #10)
+            if phase_config.property_list == "spatial":
+                self._property_list = self.SPATIAL_PROPERTIES
+                self._compare_same_name_props = False  # Only compare listed properties
+            elif phase_config.property_list == "all":
+                self._property_list = self.ALL_PROPERTIES
+                self._compare_same_name_props = True  # Also compare same-name properties
+            else:
+                # Default to spatial for unknown values
+                self._property_list = self.SPATIAL_PROPERTIES
+                self._compare_same_name_props = False
 
         # Report missing items
         for pair in match_result.ifc_only:
@@ -326,8 +367,8 @@ class Comparator:
         bc3_props = bc3.properties or {}
         ifc_props = ifc.properties or {}
 
-        # Check known comparable properties
-        for bc3_key, ifc_key in self.COMPARABLE_PROPERTIES:
+        # Check known comparable properties (uses phase-selected property list)
+        for bc3_key, ifc_key in self._property_list:
             bc3_val = bc3_props.get(bc3_key)
             ifc_val = ifc_props.get(ifc_key)
 
@@ -371,26 +412,28 @@ class Comparator:
                 ))
 
         # Also compare any BC3 properties that have same name as IFC properties
-        for key, bc3_val in bc3_props.items():
-            if key in ifc_props:
-                ifc_val = ifc_props[key]
-                # Skip if already compared via COMPARABLE_PROPERTIES
-                if any(bc3_key == key for bc3_key, _ in self.COMPARABLE_PROPERTIES):
-                    continue
+        # Only do this for "all" property list mode (Issue #10)
+        if self._compare_same_name_props:
+            for key, bc3_val in bc3_props.items():
+                if key in ifc_props:
+                    ifc_val = ifc_props[key]
+                    # Skip if already compared via property list
+                    if any(bc3_key == key for bc3_key, _ in self._property_list):
+                        continue
 
-                props_compared += 1
+                    props_compared += 1
 
-                if not self._values_equal(bc3_val, ifc_val):
-                    conflicts.append(Conflict(
-                        conflict_type=ConflictType.PROPERTY_MISMATCH,
-                        severity=ConflictSeverity.ERROR,
-                        code=pair.code,
-                        element_name=pair.name,
-                        property_name=key,
-                        ifc_value=ifc_val,
-                        bc3_value=bc3_val,
-                        message=f"Property '{key}' differs: IFC={ifc_val}, BC3={bc3_val}"
-                    ))
+                    if not self._values_equal(bc3_val, ifc_val):
+                        conflicts.append(Conflict(
+                            conflict_type=ConflictType.PROPERTY_MISMATCH,
+                            severity=ConflictSeverity.ERROR,
+                            code=pair.code,
+                            element_name=pair.name,
+                            property_name=key,
+                            ifc_value=ifc_val,
+                            bc3_value=bc3_val,
+                            message=f"Property '{key}' differs: IFC={ifc_val}, BC3={bc3_val}"
+                        ))
 
         return conflicts, props_compared
 
