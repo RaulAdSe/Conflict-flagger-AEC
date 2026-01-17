@@ -174,6 +174,29 @@ class Comparator:
     # Default: Use spatial properties for Phase 2 focus
     COMPARABLE_PROPERTIES = SPATIAL_PROPERTIES
 
+    # ==========================================================================
+    # UNIT TO IFC QUANTITY MAPPING
+    # ==========================================================================
+    # Maps BC3 units to IFC quantity names for aggregated comparison
+    # BC3 calculates: alto * ancho * longitud = total quantity
+    # IFC has: NetVolume, GrossVolume, NetArea, GrossSideArea, Length, etc.
+
+    # Volumetric units (m³)
+    VOLUME_UNITS = {'m3', 'm³', 'metro cúbico', 'metros cúbicos'}
+    VOLUME_QUANTITY_NAMES = ['NetVolume', 'GrossVolume', 'Volume']
+
+    # Area units (m²)
+    AREA_UNITS = {'m2', 'm²', 'metro cuadrado', 'metros cuadrados'}
+    AREA_QUANTITY_NAMES = ['NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea',
+                           'GrossFootprintArea', 'NetFootprintArea', 'Area']
+
+    # Linear units (m)
+    LINEAR_UNITS = {'m', 'ml', 'metro', 'metros', 'metro lineal', 'metros lineales'}
+    LINEAR_QUANTITY_NAMES = ['Length', 'NetLength', 'GrossLength']
+
+    # Countable units (u, ud)
+    COUNTABLE_UNITS = {'u', 'ud', 'un', 'pza', 'ut', 'unidad', 'unidades'}
+
     def __init__(self, tolerance: float = 0.01, compare_names: bool = True):
         """
         Initialize the comparator.
@@ -329,26 +352,31 @@ class Comparator:
                 ))
 
         # Check for quantity mismatch
-        # BC3 has quantity, IFC types have instance_count
         bc3_qty = bc3.quantity if hasattr(bc3, 'quantity') and bc3.quantity else 0
-        ifc_qty = ifc.instance_count if hasattr(ifc, 'instance_count') and ifc.instance_count else 0
+        unit = bc3.unit.lower().strip() if bc3.unit else ""
 
-        # Only compare if both have quantities and unit is countable
-        if bc3_qty > 0 and ifc_qty > 0:
-            unit = bc3.unit.lower() if bc3.unit else ""
-            is_countable = unit in ['u', 'ud', 'un', 'pza', 'ut', 'unidad', 'unidades']
+        if bc3_qty > 0:
+            ifc_qty, qty_source = self._get_ifc_quantity_for_unit(ifc, unit)
 
-            if is_countable and abs(bc3_qty - ifc_qty) > self.tolerance:
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.QUANTITY_MISMATCH,
-                    severity=ConflictSeverity.ERROR,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name="Cantidad",
-                    ifc_value=ifc_qty,
-                    bc3_value=bc3_qty,
-                    message=f"Cantidad difiere: BC3={bc3_qty} {bc3.unit}, IFC={ifc_qty} instancias"
-                ))
+            if ifc_qty is not None and ifc_qty > 0:
+                # Use percentage tolerance for volumetric/area comparisons
+                if unit in self.VOLUME_UNITS or unit in self.AREA_UNITS or unit in self.LINEAR_UNITS:
+                    # Use 5% tolerance for calculated quantities
+                    qty_tolerance = max(self.tolerance, bc3_qty * 0.05)
+                else:
+                    qty_tolerance = self.tolerance
+
+                if abs(bc3_qty - ifc_qty) > qty_tolerance:
+                    conflicts.append(Conflict(
+                        conflict_type=ConflictType.QUANTITY_MISMATCH,
+                        severity=ConflictSeverity.ERROR,
+                        code=pair.code,
+                        element_name=pair.name,
+                        property_name="Cantidad",
+                        ifc_value=round(ifc_qty, 2),
+                        bc3_value=round(bc3_qty, 2),
+                        message=f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3.unit}, IFC={ifc_qty:.2f} ({qty_source})"
+                    ))
 
         # =================================================================
         # END PHASE 1 CHECKS
@@ -476,6 +504,55 @@ class Comparator:
                 ))
 
         return conflicts
+
+    def _get_ifc_quantity_for_unit(self, ifc_type, bc3_unit: str) -> tuple[Optional[float], str]:
+        """
+        Get the appropriate IFC quantity based on BC3 unit.
+
+        Args:
+            ifc_type: The IFCType object with aggregated quantities
+            bc3_unit: The unit from BC3 (e.g., 'm3', 'm2', 'm', 'u')
+
+        Returns:
+            Tuple of (quantity_value, source_name) or (None, '') if not found
+        """
+        unit_lower = bc3_unit.lower().strip()
+
+        # Get quantities dict from IFCType
+        quantities = getattr(ifc_type, 'quantities', {}) or {}
+
+        # Volumetric units (m³)
+        if unit_lower in self.VOLUME_UNITS:
+            for qty_name in self.VOLUME_QUANTITY_NAMES:
+                if qty_name in quantities:
+                    return quantities[qty_name], qty_name
+            return None, ''
+
+        # Area units (m²)
+        if unit_lower in self.AREA_UNITS:
+            for qty_name in self.AREA_QUANTITY_NAMES:
+                if qty_name in quantities:
+                    return quantities[qty_name], qty_name
+            return None, ''
+
+        # Linear units (m)
+        if unit_lower in self.LINEAR_UNITS:
+            for qty_name in self.LINEAR_QUANTITY_NAMES:
+                if qty_name in quantities:
+                    return quantities[qty_name], qty_name
+            return None, ''
+
+        # Countable units - use instance_count
+        if unit_lower in self.COUNTABLE_UNITS:
+            instance_count = getattr(ifc_type, 'instance_count', 0) or 0
+            return float(instance_count), 'instancias'
+
+        # Unknown unit - try instance_count as fallback
+        instance_count = getattr(ifc_type, 'instance_count', 0) or 0
+        if instance_count > 0:
+            return float(instance_count), 'instancias'
+
+        return None, ''
 
     def _values_equal(self, val1: Any, val2: Any) -> bool:
         """
