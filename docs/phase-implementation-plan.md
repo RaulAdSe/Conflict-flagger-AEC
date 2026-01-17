@@ -574,13 +574,13 @@ git push origin archive/albert-matching-v3
 ## Success Criteria
 
 ### Phase 1 Complete When:
-- [ ] All 5 errors in `MODELO ERRONEO.bc3` are detected
-- [ ] Description matching finds items with different codes
-- [ ] Report shows errors first, matches in separate sheet
-- [ ] Sin Presupuestar / Sin Modelar in dedicated sheets
-- [ ] Excel opens automatically after comparison
-- [ ] No duplicate app instances
-- [ ] Issues #7, #8, #9, #11, #12, #13, #14 closed
+- [x] All 5 errors in `MODELO ERRONEO.bc3` are detected
+- [x] Description matching finds items with different codes
+- [x] Report shows errors first, matches in separate sheet
+- [x] Sin Presupuestar / Sin Modelar in dedicated sheets
+- [x] Excel opens automatically after comparison
+- [x] No duplicate app instances
+- [x] Issues #7, #8, #9, #11, #12, #13, #14 closed
 
 ### Phase 2 Complete When:
 - [x] Spatial property (h/w/d) mismatches detected
