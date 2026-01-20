@@ -93,15 +93,6 @@ In construction projects, **BIM models** (IFC files) and **budgets** (BC3 files)
 | **Not Modeled** | Budget items without corresponding 3D elements | Budget includes flooring not yet modeled |
 | **Quantity Mismatch** | Different quantities between model and budget | IFC shows 100m² but budget says 95m² |
 
-### Tolerance Thresholds
-
-| Unit Type | Tolerance | Example |
-|-----------|-----------|---------|
-| Count (u, ud) | 0% (exact) | Doors, windows |
-| Area (m², m2) | 5% | Floors, walls |
-| Volume (m³, m3) | 5% | Concrete, fill |
-| Length (m, ml) | 2% | Beams, pipes |
-
 ---
 
 ## Output Report
@@ -306,13 +297,6 @@ Phase.CUSTOM: PhaseConfig(
 
 MIT License - See [LICENSE](LICENSE) for details.
 
----
-
-## Authors
-
-<div align="center">
-
-Developed by **[Servitec Ingeniería](https://servitec.com)**
 
 *For BIM project validation in the AEC (Architecture, Engineering, Construction) sector*
 
