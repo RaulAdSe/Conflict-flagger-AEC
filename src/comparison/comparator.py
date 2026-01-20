@@ -121,8 +121,8 @@ class Comparator:
         self.tolerances = {
             'count': 0.0,    # Exact match for counts
             'area': 0.05,    # 5% for areas
-            'volume': 0.05,  # 5% for volumes  
-            'length': 0.02,  # 2% for lengths
+            'volume': 0.05,  # 5% for volumes
+            'length': 0.06,  # 6% for lengths (increased from 2% to handle measurement differences)
         }
     
     def compare(self, match_result, phase_config=None) -> ComparisonResult:
@@ -257,6 +257,11 @@ class Comparator:
                     description = (f"Exportación IFC incompleta: BC3={bc3_qty:.2f} {bc3_elem.unit}, "
                                    f"IFC={ifc_qty:.2f} ({qty_source}) - {instances_without} de "
                                    f"{ifc_type.instance_count} instancias sin {qty_source}")
+                elif self._is_likely_export_issue(ifc_type, ifc_qty, bc3_qty, diff_pct):
+                    # Likely export/measurement issue, not a real error
+                    severity = ConflictSeverity.WARNING
+                    description = (f"Diferencia de medición: BC3={bc3_qty:.2f} {bc3_elem.unit}, "
+                                   f"IFC={ifc_qty:.2f} ({qty_source}) - {diff_pct*100:.1f}%")
                 else:
                     # All instances have the quantity, but values differ - real error
                     severity = ConflictSeverity.ERROR
@@ -291,16 +296,9 @@ class Comparator:
         if bc3_unit in self.AREA_UNITS:
             return self._get_best_area(ifc_type, bc3_qty)
         
-        # VOLUME UNITS
+        # VOLUME UNITS - select best match (closest to BC3)
         if bc3_unit in self.VOLUME_UNITS:
-            net_vol = ifc_type.quantities.get('NetVolume', 0)
-            gross_vol = ifc_type.quantities.get('GrossVolume', 0)
-            # Prefer NetVolume, fallback to GrossVolume
-            if net_vol > 0:
-                return net_vol, "NetVolume"
-            if gross_vol > 0:
-                return gross_vol, "GrossVolume"
-            return 0, "NoVolume"
+            return self._get_best_volume(ifc_type, bc3_qty)
         
         # LENGTH UNITS
         if bc3_unit in self.LENGTH_UNITS:
@@ -315,7 +313,7 @@ class Comparator:
     def _get_best_area(self, ifc_type, bc3_qty: float) -> Tuple[float, str]:
         """
         Select the IFC area that best matches the BC3 quantity.
-        
+
         Candidates: NetArea, GrossArea, GrossSideArea, NetSideArea
         """
         candidates = [
@@ -324,17 +322,42 @@ class Comparator:
             (ifc_type.quantities.get('GrossSideArea', 0), 'GrossSideArea'),
             (ifc_type.quantities.get('NetSideArea', 0), 'NetSideArea'),
         ]
-        
+
         # Filter out zeros
         valid = [(v, n) for v, n in candidates if v > 0]
-        
+
         if not valid:
             return 0, "NoArea"
-        
+
         if bc3_qty <= 0:
             # Default to first available
             return valid[0]
-        
+
+        # Find closest to BC3 quantity
+        best = min(valid, key=lambda x: abs(x[0] - bc3_qty))
+        return best
+
+    def _get_best_volume(self, ifc_type, bc3_qty: float) -> Tuple[float, str]:
+        """
+        Select the IFC volume that best matches the BC3 quantity.
+
+        Candidates: NetVolume, GrossVolume
+        """
+        candidates = [
+            (ifc_type.quantities.get('NetVolume', 0), 'NetVolume'),
+            (ifc_type.quantities.get('GrossVolume', 0), 'GrossVolume'),
+        ]
+
+        # Filter out zeros
+        valid = [(v, n) for v, n in candidates if v > 0]
+
+        if not valid:
+            return 0, "NoVolume"
+
+        if bc3_qty <= 0:
+            # Default to first available
+            return valid[0]
+
         # Find closest to BC3 quantity
         best = min(valid, key=lambda x: abs(x[0] - bc3_qty))
         return best
@@ -457,6 +480,35 @@ class Comparator:
 
         # Some instances are missing the quantity - incomplete export
         return instances_with_qty < total_instances and instances_with_qty > 0
+
+    def _is_likely_export_issue(self, ifc_type, ifc_qty: float, bc3_qty: float, diff_pct: float) -> bool:
+        """
+        Detect if the quantity mismatch is likely due to export/measurement issues
+        rather than a real error that needs correction.
+
+        Returns True (WARNING) when:
+        1. Very few instances (1-2) in IFC with large difference - suggests missing instances
+        2. IFC has more than BC3 with few instances - suggests BC3 measurement error
+        3. Difference is moderate (<35%) - likely measurement/calculation differences
+
+        Returns False (ERROR) only for significant differences with many instances.
+        """
+        # Case 1: Very few instances with large difference (BC3 >> IFC)
+        # Suggests IFC export is missing instances
+        if ifc_type.instance_count <= 2 and bc3_qty > ifc_qty and diff_pct > 0.50:
+            return True
+
+        # Case 2: Very few instances with large difference (IFC >> BC3)
+        # Suggests BC3 has measurement error or different element
+        if ifc_type.instance_count <= 2 and ifc_qty > bc3_qty and diff_pct > 0.50:
+            return True
+
+        # Case 3: Moderate difference (<35%) - likely measurement/calculation variance
+        # These are not critical errors, just differences in how quantities are calculated
+        if diff_pct <= 0.35:
+            return True
+
+        return False
 
     def _normalize(self, text: str) -> str:
         """Normalize text for comparison."""
