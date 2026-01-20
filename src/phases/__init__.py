@@ -17,6 +17,6 @@ Available Phases:
 - FULL_ANALYSIS: Comprehensive comparison including all properties
 """
 
-from .config import Phase, PhaseConfig, PHASES, get_phase_config
+from .config import Phase, PhaseConfig, get_phase_config
 
-__all__ = ['Phase', 'PhaseConfig', 'PHASES', 'get_phase_config']
+__all__ = ['Phase', 'PhaseConfig', 'get_phase_config']

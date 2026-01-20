@@ -1,158 +1,110 @@
 """
-IFC Parser using ifcopenshell.
+IFC Parser - CLEAN VERSION
 
-Extracts elements with their GlobalId, Tag, properties for matching with BC3.
+Extracts types and elements from IFC files with proper quantity aggregation.
+
+KEY BEHAVIORS:
+1. Consolidates types with same Tag (Revit exports duplicates)
+2. Aggregates quantities from all instances to their type
+3. Does NOT divide wall areas (Cost-It measures both faces)
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 import ifcopenshell
 import ifcopenshell.util.element as element_util
 
 
 @dataclass
 class IFCElement:
-    """Represents an element extracted from an IFC file."""
-
-    global_id: str  # IFC GlobalId (22 character base64)
-    tag: Optional[str]  # Revit Element ID
+    """Represents an element instance from an IFC file."""
+    global_id: str
+    tag: Optional[str]
     name: str
-    ifc_class: str  # e.g., IfcColumn, IfcBeam, IfcWall
-
-    # Type information
-    type_id: Optional[str] = None  # Type GlobalId
+    ifc_class: str
+    type_id: Optional[str] = None
     type_name: Optional[str] = None
-
-    # Classification
     family_name: Optional[str] = None
-    type_mark: Optional[str] = None
-
-    # Properties
     properties: dict = field(default_factory=dict)
-
-    # Quantities
     quantities: dict = field(default_factory=dict)
-
-    # Hierarchy
     level: Optional[str] = None
-    parent_id: Optional[str] = None
-
-    def __post_init__(self):
-        if self.properties is None:
-            self.properties = {}
-        if self.quantities is None:
-            self.quantities = {}
 
 
 @dataclass
 class IFCType:
     """Represents a type definition from an IFC file."""
-
     global_id: str
-    tag: Optional[str]  # Type ID from Revit
+    tag: Optional[str]
     name: str
-    ifc_class: str  # e.g., IfcColumnType, IfcBeamType
-
-    # Classification
+    ifc_class: str
     family_name: Optional[str] = None
     type_name: Optional[str] = None
-
-    # Properties
     properties: dict = field(default_factory=dict)
-
-    # Quantities (aggregated from all instances)
     quantities: dict = field(default_factory=dict)
-
-    # Instance count
     instance_count: int = 0
-
-    def __post_init__(self):
-        if self.properties is None:
-            self.properties = {}
-        if self.quantities is None:
-            self.quantities = {}
+    # Track consolidated type GlobalIds
+    consolidated_ids: List[str] = field(default_factory=list)
+    # Track how many instances have each quantity (for detecting incomplete exports)
+    # Format: {quantity_name: count_of_instances_with_this_quantity}
+    quantity_coverage: dict = field(default_factory=dict)
 
 
 @dataclass
 class IFCParseResult:
     """Result of parsing an IFC file."""
-
-    elements: dict  # global_id -> IFCElement
-    types: dict  # global_id -> IFCType
-    elements_by_tag: dict  # tag -> IFCElement
-    types_by_tag: dict  # tag -> IFCType
+    elements: Dict[str, IFCElement]
+    types: Dict[str, IFCType]
+    elements_by_tag: Dict[str, IFCElement]
+    types_by_tag: Dict[str, IFCType]
     schema: str
     project_name: str
-    errors: list = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
 
 
 class IFCParser:
     """Parser for IFC files using ifcopenshell."""
 
-    # Element types we're interested in
     ELEMENT_TYPES = [
-        'IfcWall', 'IfcWallStandardCase',
-        'IfcColumn',
-        'IfcBeam',
-        'IfcSlab',
-        'IfcDoor',
-        'IfcWindow',
-        'IfcStair', 'IfcStairFlight',
-        'IfcRailing',
-        'IfcRoof',
-        'IfcCovering',
-        'IfcCurtainWall',
-        'IfcMember',
-        'IfcPlate',
-        'IfcFooting',
-        'IfcPile',
-        'IfcRamp', 'IfcRampFlight',
+        'IfcWall',  # Includes IfcWallStandardCase
+        'IfcColumn', 'IfcBeam', 'IfcSlab',
+        'IfcDoor', 'IfcWindow',
+        'IfcStair',  # Includes IfcStairFlight
+        'IfcRailing', 'IfcRoof',
+        'IfcCovering', 'IfcCurtainWall',
+        'IfcMember', 'IfcPlate',
+        'IfcFooting', 'IfcPile',
+        'IfcRamp',  # Includes IfcRampFlight
         'IfcBuildingElementProxy',
         'IfcSpace',
         'IfcFurnishingElement',
-        'IfcFlowTerminal',
-        'IfcFlowSegment',
+        'IfcFlowTerminal', 'IfcFlowSegment',
     ]
 
     def __init__(self):
         self.ifc_file = None
 
     def parse(self, file_path: str | Path) -> IFCParseResult:
-        """
-        Parse an IFC file and extract elements with their properties.
-
-        Args:
-            file_path: Path to the IFC file
-
-        Returns:
-            IFCParseResult with elements and types
-        """
+        """Parse an IFC file and extract elements with their properties."""
         file_path = Path(file_path)
 
         if not file_path.exists():
             raise FileNotFoundError(f"IFC file not found: {file_path}")
 
-        try:
-            self.ifc_file = ifcopenshell.open(str(file_path))
-        except Exception as e:
-            raise IOError(f"Error opening IFC file: {e}")
+        self.ifc_file = ifcopenshell.open(str(file_path))
 
-        elements: dict[str, IFCElement] = {}
-        types: dict[str, IFCType] = {}
-        elements_by_tag: dict[str, IFCElement] = {}
-        types_by_tag: dict[str, IFCType] = {}
         errors = []
-
-        # Get schema and project info
         schema = self.ifc_file.schema
         project_name = self._get_project_name()
 
-        # Parse type definitions first
-        self._parse_types(types, types_by_tag, errors)
-
-        # Parse elements
-        self._parse_elements(elements, elements_by_tag, types, errors)
+        # Step 1: Parse type definitions
+        raw_types = self._parse_types(errors)
+        
+        # Step 2: Consolidate types by Tag
+        types, types_by_tag = self._consolidate_types(raw_types)
+        
+        # Step 3: Parse elements and aggregate to types
+        elements, elements_by_tag = self._parse_elements(types, types_by_tag, errors)
 
         return IFCParseResult(
             elements=elements,
@@ -172,44 +124,57 @@ class IFCParser:
         except (IndexError, AttributeError):
             return ""
 
-    def _parse_types(self, types: dict, types_by_tag: dict, errors: list) -> None:
-        """Parse all type definitions."""
+    def _parse_types(self, errors: list) -> Dict[str, IFCType]:
+        """Parse all type definitions (raw, before consolidation)."""
+        # Specific type classes to parse
         type_classes = [
             'IfcWallType', 'IfcColumnType', 'IfcBeamType', 'IfcSlabType',
             'IfcDoorType', 'IfcWindowType', 'IfcStairType', 'IfcRailingType',
             'IfcRoofType', 'IfcCoveringType', 'IfcCurtainWallType',
             'IfcMemberType', 'IfcPlateType', 'IfcFootingType', 'IfcPileType',
-            'IfcBuildingElementProxyType', 'IfcFurnitureType',
-            'IfcSpaceType',
+            'IfcBuildingElementProxyType', 'IfcFurnitureType', 'IfcSpaceType',
+            # IFC2x3 style classes (used instead of Type classes)
+            'IfcDoorStyle', 'IfcWindowStyle',
+            # Additional type classes
+            'IfcStairFlightType', 'IfcRampFlightType',
         ]
+
+        types = {}
 
         for type_class in type_classes:
             try:
                 for ifc_type in self.ifc_file.by_type(type_class):
                     try:
-                        parsed_type = self._parse_single_type(ifc_type)
-                        if parsed_type:
-                            types[parsed_type.global_id] = parsed_type
-                            if parsed_type.tag:
-                                types_by_tag[parsed_type.tag] = parsed_type
+                        parsed = self._parse_single_type(ifc_type)
+                        if parsed:
+                            types[parsed.global_id] = parsed
                     except Exception as e:
-                        errors.append(f"Error parsing type {type_class}: {e}")
+                        errors.append(f"Error parsing {type_class}: {e}")
             except RuntimeError:
-                # Type class not in this schema
                 continue
+
+        # Also parse generic IfcTypeProduct to catch any types not covered above
+        # (e.g., Revit sometimes exports types as generic IfcTypeProduct)
+        try:
+            for ifc_type in self.ifc_file.by_type('IfcTypeProduct'):
+                if ifc_type.GlobalId not in types:  # Only if not already parsed
+                    try:
+                        parsed = self._parse_single_type(ifc_type)
+                        if parsed:
+                            types[parsed.global_id] = parsed
+                    except Exception as e:
+                        errors.append(f"Error parsing IfcTypeProduct: {e}")
+        except RuntimeError:
+            pass
+
+        return types
 
     def _parse_single_type(self, ifc_type) -> Optional[IFCType]:
         """Parse a single IFC type definition."""
         global_id = ifc_type.GlobalId
         name = ifc_type.Name or ""
-
-        # Get tag (usually the last attribute or from Tag property)
         tag = getattr(ifc_type, 'Tag', None)
-
-        # Parse name to extract family and type
         family_name, type_name = self._parse_type_name(name)
-
-        # Get properties
         properties = self._get_properties(ifc_type)
 
         return IFCType(
@@ -219,113 +184,146 @@ class IFCParser:
             ifc_class=ifc_type.is_a(),
             family_name=family_name,
             type_name=type_name,
-            properties=properties
+            properties=properties,
+            consolidated_ids=[global_id]
         )
 
-    def _parse_elements(self, elements: dict, elements_by_tag: dict,
-                        types: dict, errors: list) -> None:
-        """Parse all building elements."""
+    def _consolidate_types(self, raw_types: Dict[str, IFCType]):
+        """
+        Consolidate types with the same Tag into one entry.
+        
+        Revit can export multiple type entities with the same Tag.
+        We consolidate them to avoid counting the same type multiple times.
+        
+        IMPORTANT: The returned `types` dict only contains ONE entry per Tag,
+        not multiple entries pointing to the same object.
+        """
+        types = {}
+        types_by_tag = {}
+        
+        # Group by tag
+        by_tag = {}
+        no_tag = []
+        
+        for gid, ifc_type in raw_types.items():
+            if ifc_type.tag:
+                if ifc_type.tag not in by_tag:
+                    by_tag[ifc_type.tag] = []
+                by_tag[ifc_type.tag].append(ifc_type)
+            else:
+                no_tag.append(ifc_type)
+        
+        # Consolidate each tag group - ONE entry per tag
+        for tag, type_list in by_tag.items():
+            # Use first as master, record all GUIDs
+            master = type_list[0]
+            master.consolidated_ids = [t.global_id for t in type_list]
+            
+            # Only add master to types dict (not all 27!)
+            types[master.global_id] = master
+            types_by_tag[tag] = master
+        
+        # Add types without tag
+        for ifc_type in no_tag:
+            types[ifc_type.global_id] = ifc_type
+        
+        return types, types_by_tag
+
+    def _parse_elements(self, types: dict, types_by_tag: dict, errors: list):
+        """Parse all building elements and aggregate quantities to types."""
+        elements = {}
+        elements_by_tag = {}
+        
         for element_class in self.ELEMENT_TYPES:
             try:
                 for ifc_element in self.ifc_file.by_type(element_class):
                     try:
-                        parsed = self._parse_single_element(ifc_element, types)
+                        parsed = self._parse_single_element(ifc_element, types, types_by_tag)
                         if parsed:
                             elements[parsed.global_id] = parsed
                             if parsed.tag:
                                 elements_by_tag[parsed.tag] = parsed
-
-                            # Aggregate quantities to the type
-                            if parsed.type_id and parsed.type_id in types:
-                                self._aggregate_quantities_to_type(
-                                    types[parsed.type_id],
-                                    parsed.quantities
-                                )
                     except Exception as e:
                         errors.append(f"Error parsing {element_class}: {e}")
             except RuntimeError:
-                # Element class not in this schema
                 continue
+                
+        return elements, elements_by_tag
 
-    def _aggregate_quantities_to_type(self, ifc_type: IFCType, element_quantities: dict) -> None:
-        """Aggregate element quantities to the type's total quantities."""
-        for qty_name, qty_value in element_quantities.items():
-            if qty_value is not None and isinstance(qty_value, (int, float)):
-                if qty_name in ifc_type.quantities:
-                    ifc_type.quantities[qty_name] += qty_value
-                else:
-                    ifc_type.quantities[qty_name] = qty_value
-
-    def _parse_single_element(self, ifc_element, types: dict) -> Optional[IFCElement]:
-        """Parse a single IFC element."""
+    def _parse_single_element(self, ifc_element, types: dict, types_by_tag: dict) -> Optional[IFCElement]:
+        """Parse a single IFC element and aggregate to its type."""
         global_id = ifc_element.GlobalId
         name = ifc_element.Name or ""
-
-        # Get tag
         tag = getattr(ifc_element, 'Tag', None)
 
         # Get type information
         type_id = None
         type_name = None
         family_name = None
+        master_type = None
 
         try:
             element_type = element_util.get_type(ifc_element)
             if element_type:
                 type_id = element_type.GlobalId
                 type_name = element_type.Name
-
-                # Update instance count
-                if type_id in types:
-                    types[type_id].instance_count += 1
-
-                # Parse names
+                type_tag = getattr(element_type, 'Tag', None)
+                
+                # Find the consolidated master type
+                if type_tag and type_tag in types_by_tag:
+                    master_type = types_by_tag[type_tag]
+                elif type_id in types:
+                    master_type = types[type_id]
+                
                 family_name, type_name = self._parse_type_name(type_name or name)
         except Exception:
             family_name, type_name = self._parse_type_name(name)
 
-        # Get properties and quantities
-        properties = self._get_properties(ifc_element)
+        # Get element quantities
         quantities = self._get_quantities(ifc_element)
-
-        # Get level
-        level = self._get_level(ifc_element)
+        
+        # Aggregate to master type
+        if master_type:
+            master_type.instance_count += 1
+            for qty_name, qty_value in quantities.items():
+                if qty_value is not None and isinstance(qty_value, (int, float)):
+                    # Aggregate quantity value
+                    if qty_name in master_type.quantities:
+                        master_type.quantities[qty_name] += qty_value
+                    else:
+                        master_type.quantities[qty_name] = qty_value
+                    # Track coverage: count how many instances have this quantity
+                    if qty_name in master_type.quantity_coverage:
+                        master_type.quantity_coverage[qty_name] += 1
+                    else:
+                        master_type.quantity_coverage[qty_name] = 1
 
         return IFCElement(
             global_id=global_id,
             tag=tag,
             name=name,
             ifc_class=ifc_element.is_a(),
-            type_id=type_id,
+            type_id=master_type.global_id if master_type else type_id,
             type_name=type_name,
             family_name=family_name,
-            properties=properties,
+            properties=self._get_properties(ifc_element),
             quantities=quantities,
-            level=level
+            level=self._get_level(ifc_element)
         )
 
-    def _parse_type_name(self, name: str) -> tuple[Optional[str], Optional[str]]:
-        """
-        Parse a type name like 'FamilyName:TypeName' into components.
-
-        Returns:
-            Tuple of (family_name, type_name)
-        """
+    def _parse_type_name(self, name: str) -> tuple:
+        """Parse 'FamilyName:TypeName' into components."""
         if not name:
             return None, None
-
         if ':' in name:
             parts = name.split(':', 1)
             return parts[0].strip(), parts[1].strip()
-
         return name, None
 
     def _get_properties(self, ifc_entity) -> dict:
         """Extract properties from an IFC entity."""
         properties = {}
-
         try:
-            # Get property sets
             if hasattr(ifc_entity, 'IsDefinedBy'):
                 for rel in ifc_entity.IsDefinedBy:
                     if rel.is_a('IfcRelDefinesByProperties'):
@@ -336,20 +334,8 @@ class IFCParser:
                                     value = self._get_property_value(prop)
                                     if value is not None:
                                         properties[prop.Name] = value
-
-            # Also check for type properties
-            if hasattr(ifc_entity, 'HasPropertySets'):
-                for prop_set in ifc_entity.HasPropertySets or []:
-                    if prop_set.is_a('IfcPropertySet'):
-                        for prop in prop_set.HasProperties:
-                            if prop.is_a('IfcPropertySingleValue'):
-                                value = self._get_property_value(prop)
-                                if value is not None:
-                                    properties[prop.Name] = value
-
         except Exception:
             pass
-
         return properties
 
     def _get_property_value(self, prop):
@@ -358,11 +344,8 @@ class IFCParser:
             nominal_value = prop.NominalValue
             if nominal_value is None:
                 return None
-
-            # Handle wrapped values
             if hasattr(nominal_value, 'wrappedValue'):
                 return nominal_value.wrappedValue
-
             return nominal_value
         except Exception:
             return None
@@ -370,7 +353,6 @@ class IFCParser:
     def _get_quantities(self, ifc_entity) -> dict:
         """Extract quantities from an IFC entity."""
         quantities = {}
-
         try:
             if hasattr(ifc_entity, 'IsDefinedBy'):
                 for rel in ifc_entity.IsDefinedBy:
@@ -383,7 +365,6 @@ class IFCParser:
                                     quantities[qty.Name] = qty_value
         except Exception:
             pass
-
         return quantities
 
     def _get_quantity_value(self, qty):
@@ -414,21 +395,3 @@ class IFCParser:
         except Exception:
             pass
         return None
-
-    def get_elements_by_type_tag(self, result: IFCParseResult, type_tag: str) -> list[IFCElement]:
-        """Get all instances of a type by its tag."""
-        if type_tag not in result.types_by_tag:
-            return []
-
-        ifc_type = result.types_by_tag[type_tag]
-        return [
-            elem for elem in result.elements.values()
-            if elem.type_id == ifc_type.global_id
-        ]
-
-    def get_elements_by_class(self, result: IFCParseResult, ifc_class: str) -> list[IFCElement]:
-        """Get all elements of a specific IFC class."""
-        return [
-            elem for elem in result.elements.values()
-            if elem.ifc_class == ifc_class or elem.ifc_class.startswith(ifc_class)
-        ]

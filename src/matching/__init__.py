@@ -8,17 +8,15 @@ Provides multiple matching strategies:
 - DESCRIPTION: Match by description similarity (Jaccard)
 """
 
-from src.matching.matcher import (
+from .matcher import (
     Matcher,
-    MatchMethod,
-    MatchStatus,
     MatchedPair,
     MatchResult,
-    normalize_description,
-    calculate_similarity,
+    MatchStatus,
+    MatchMethod,
 )
 
-from src.matching.filters import (
+from .filters import (
     is_ignored_element,
     filter_elements,
     get_ignored_elements,
@@ -28,16 +26,15 @@ from src.matching.filters import (
 __all__ = [
     # Matcher
     "Matcher",
-    "MatchMethod",
-    "MatchStatus",
     "MatchedPair",
     "MatchResult",
-    # Similarity functions
-    "normalize_description",
-    "calculate_similarity",
+    "MatchStatus",
+    "MatchMethod",
     # Filters
     "is_ignored_element",
     "filter_elements",
     "get_ignored_elements",
     "IGNORE_TERMS",
 ]
+
+
