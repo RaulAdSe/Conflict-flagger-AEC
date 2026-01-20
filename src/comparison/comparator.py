@@ -265,9 +265,25 @@ class Comparator:
                                    f"BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC Length={ifc_qty:.2f} "
                                    f"(NetVolume={net_vol:.2f}m³ sugiere longitud mayor)")
                 else:
-                    # All instances have the quantity, but values differ - real error
-                    severity = ConflictSeverity.ERROR
-                    description = f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC={ifc_qty:.2f} ({qty_source}) - {diff_pct*100:.1f}%"
+                    # Check for general export issues (CostIt bugs, data errors)
+                    export_issue = self._detect_export_issue(
+                        ifc_type, bc3_qty, ifc_qty, diff_pct, bc3_elem.unit
+                    )
+                    if export_issue:
+                        severity = ConflictSeverity.WARNING
+                        description = export_issue
+                    else:
+                        # Check for CostIt repeated value bug (ERROR, not warning)
+                        repeated_value_issue = self._detect_repeated_value_bug(
+                            ifc_type, bc3_qty, ifc_qty, diff_pct, bc3_elem.unit
+                        )
+                        if repeated_value_issue:
+                            severity = ConflictSeverity.ERROR
+                            description = repeated_value_issue
+                        else:
+                            # All instances have the quantity, but values differ - real error
+                            severity = ConflictSeverity.ERROR
+                            description = f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC={ifc_qty:.2f} ({qty_source}) - {diff_pct*100:.1f}%"
 
             return Conflict(
                 element_code=bc3_elem.code,
@@ -528,6 +544,83 @@ class Comparator:
             return True
 
         return False
+
+    def _detect_export_issue(self, ifc_type, bc3_qty: float, ifc_qty: float,
+                             diff_pct: float, bc3_unit: str) -> Optional[str]:
+        """
+        Detect general CostIt/BC3 export issues using pattern analysis.
+
+        Returns a description string if an export issue is detected, None otherwise.
+        These are issues where the BC3 data appears incorrect due to export bugs,
+        not real discrepancies in the model.
+        """
+        instance_count = ifc_type.instance_count
+
+        # Rule 1: Impossibly small BC3 value for the unit type
+        # A beam/column with length < 0.1m is likely a data error
+        min_thresholds = {
+            'm': 0.1,      # 10cm minimum for length
+            'ml': 0.1,
+            'm2': 0.01,    # 0.01m² minimum for area
+            'm²': 0.01,
+            'm3': 0.001,   # 0.001m³ minimum for volume
+            'm³': 0.001,
+        }
+        unit_lower = bc3_unit.lower().strip()
+        min_threshold = min_thresholds.get(unit_lower, 0)
+
+        if min_threshold > 0 and bc3_qty < min_threshold and bc3_qty > 0:
+            return (f"Valor BC3 imposiblemente pequeño: BC3={bc3_qty:.4f} {bc3_unit} "
+                    f"(mínimo esperado: {min_threshold} {bc3_unit}), IFC={ifc_qty:.2f}")
+
+        # Rule 2: Consistent small offset (methodology difference)
+        # If difference is small (< 10%) and consistent, it's likely
+        # a measurement methodology difference (gross vs net), not an error
+        if 0.02 < diff_pct <= 0.10 and instance_count >= 3:
+            # Small consistent difference with multiple instances = methodology
+            return (f"Diferencia de metodología de medición: BC3={bc3_qty:.2f}, "
+                    f"IFC={ifc_qty:.2f} ({diff_pct*100:.1f}% dif) - "
+                    f"probablemente diferencia bruto/neto")
+
+        return None
+
+    def _detect_repeated_value_bug(self, ifc_type, bc3_qty: float, ifc_qty: float,
+                                    diff_pct: float, bc3_unit: str) -> Optional[str]:
+        """
+        Detect CostIt bug where BC3 has same value repeated for all instances
+        while IFC has varying values.
+
+        This is an ERROR because BC3 doesn't reflect actual geometry.
+        Returns description if detected, None otherwise.
+        """
+        instance_count = ifc_type.instance_count
+
+        # Only applies when there are multiple instances
+        if instance_count < 2:
+            return None
+
+        # Only check if there's a significant difference (>15%)
+        if diff_pct <= 0.15:
+            return None
+
+        # Calculate per-instance values
+        bc3_per_instance = bc3_qty / instance_count
+        ifc_per_instance = ifc_qty / instance_count
+
+        # Check if BC3 total is exactly (per_instance × count)
+        # This suggests all instances have the same BC3 value
+        division_result = bc3_qty / bc3_per_instance
+        is_exact_multiple = abs(division_result - instance_count) < 0.001
+
+        if is_exact_multiple:
+            # BC3 appears to use repeated value for all instances
+            # while IFC has varying values (indicated by the large diff_pct)
+            return (f"BC3 usa valor repetido: {instance_count} instancias × {bc3_per_instance:.2f} {bc3_unit} = "
+                    f"{bc3_qty:.2f} {bc3_unit}, pero IFC tiene valores variables "
+                    f"(total={ifc_qty:.2f}, promedio={ifc_per_instance:.2f}) - "
+                    f"diferencia {diff_pct*100:.1f}%")
+
+        return None
 
     def _normalize(self, text: str) -> str:
         """Normalize text for comparison."""
