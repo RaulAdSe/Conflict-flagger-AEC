@@ -118,17 +118,20 @@ size_excludes = [
     'ifcopenshell.validate',
 ]
 
+import os
+PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(SPEC), '..', '..'))
+
 a = Analysis(
-    ['src/app_comparator.py'],
-    pathex=['.'],
+    [os.path.join(PROJ_ROOT, 'src/app_comparator.py')],
+    pathex=[PROJ_ROOT],
     binaries=[],
     datas=[
-        ('src/parsers', 'parsers'),
-        ('src/matching', 'matching'),
-        ('src/comparison', 'comparison'),
-        ('src/reporting', 'reporting'),
-        ('src/phases', 'phases'),
-        ('app_design/Servitec logo.png', 'app_design'),  # Logo for both platforms
+        (os.path.join(PROJ_ROOT, 'src/parsers'), 'parsers'),
+        (os.path.join(PROJ_ROOT, 'src/matching'), 'matching'),
+        (os.path.join(PROJ_ROOT, 'src/comparison'), 'comparison'),
+        (os.path.join(PROJ_ROOT, 'src/reporting'), 'reporting'),
+        (os.path.join(PROJ_ROOT, 'src/phases'), 'phases'),
+        (os.path.join(PROJ_ROOT, 'docs/design/Servitec logo.png'), 'docs/design'),  # Logo for both platforms
     ] + ifcopenshell_datas,
     hiddenimports=essential_hiddenimports,
     hookspath=[],

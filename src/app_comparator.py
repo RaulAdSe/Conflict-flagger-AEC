@@ -549,7 +549,7 @@ class ConflictFlaggerApp:
     def _get_logo_path(self):
         """Get the path to the logo file, works in both dev and built app."""
         # Try development path first
-        dev_path = Path(__file__).parent.parent / "app_design" / "Servitec logo.png"
+        dev_path = Path(__file__).parent.parent / "docs" / "design" / "Servitec logo.png"
         if dev_path.exists():
             return dev_path
 
@@ -557,7 +557,7 @@ class ConflictFlaggerApp:
         if getattr(sys, 'frozen', False):
             # Running as compiled
             bundle_dir = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(sys.executable).parent
-            logo_path = bundle_dir / "app_design" / "Servitec logo.png"
+            logo_path = bundle_dir / "docs" / "design" / "Servitec logo.png"
             if logo_path.exists():
                 return logo_path
 
