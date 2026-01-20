@@ -61,12 +61,17 @@ class IFCType:
     # Properties
     properties: dict = field(default_factory=dict)
 
+    # Quantities (aggregated from all instances)
+    quantities: dict = field(default_factory=dict)
+
     # Instance count
     instance_count: int = 0
 
     def __post_init__(self):
         if self.properties is None:
             self.properties = {}
+        if self.quantities is None:
+            self.quantities = {}
 
 
 @dataclass
@@ -229,11 +234,27 @@ class IFCParser:
                             elements[parsed.global_id] = parsed
                             if parsed.tag:
                                 elements_by_tag[parsed.tag] = parsed
+
+                            # Aggregate quantities to the type
+                            if parsed.type_id and parsed.type_id in types:
+                                self._aggregate_quantities_to_type(
+                                    types[parsed.type_id],
+                                    parsed.quantities
+                                )
                     except Exception as e:
                         errors.append(f"Error parsing {element_class}: {e}")
             except RuntimeError:
                 # Element class not in this schema
                 continue
+
+    def _aggregate_quantities_to_type(self, ifc_type: IFCType, element_quantities: dict) -> None:
+        """Aggregate element quantities to the type's total quantities."""
+        for qty_name, qty_value in element_quantities.items():
+            if qty_value is not None and isinstance(qty_value, (int, float)):
+                if qty_name in ifc_type.quantities:
+                    ifc_type.quantities[qty_name] += qty_value
+                else:
+                    ifc_type.quantities[qty_name] = qty_value
 
     def _parse_single_element(self, ifc_element, types: dict) -> Optional[IFCElement]:
         """Parse a single IFC element."""

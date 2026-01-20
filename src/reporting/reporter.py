@@ -35,11 +35,18 @@ if TYPE_CHECKING:
 
 # Spanish translations for conflict types and messages
 TRANSLATIONS = {
-    # Conflict types
+    # Conflict types - Phase 1
+    "code_mismatch": "Código diferente",
+    "quantity_mismatch": "Cantidad diferente",
+    "unit_mismatch": "Unidad diferente",
+    "missing_in_bc3": "Sin presupuestar",
+    "missing_in_ifc": "Sin modelar",
+
+    # Conflict types - Phase 2
     "property_mismatch": "Diferencia de valor",
-    "missing_in_bc3": "Falta en presupuesto",
-    "missing_in_ifc": "Falta en modelo",
-    "quantity_mismatch": "Diferencia de cantidad",
+    "property_missing_ifc": "Propiedad falta en IFC",
+    "property_missing_bc3": "Propiedad falta en BC3",
+    "name_mismatch": "Nombre diferente",
     "type_mismatch": "Diferencia de tipo",
 
     # Severity levels
@@ -51,6 +58,7 @@ TRANSLATIONS = {
     "guid": "Por GUID",
     "tag": "Por Tag/ID",
     "name": "Por nombre",
+    "description": "Por descripción",
     "type_name": "Por tipo",
 
     # Common messages
@@ -69,11 +77,12 @@ class ReportConfig:
     """Configuration for report generation."""
 
     # Colors (RGB hex)
-    color_error: str = "FF6B6B"  # Soft red
-    color_warning: str = "FFE66D"  # Soft yellow
-    color_ok: str = "7ED957"  # Soft green
-    color_info: str = "74C0FC"  # Soft blue
+    color_error: str = "FF6B6B"  # Soft red - quantity mismatch
+    color_warning: str = "FFE66D"  # Soft yellow - missing items
+    color_ok: str = "7ED957"  # Soft green - correct
+    color_info: str = "74C0FC"  # Soft blue - informational
     color_header: str = "2E86AB"  # Professional blue
+    color_code_mismatch: str = "FFA500"  # Orange - code mismatch (matched by description)
 
     # Display options
     show_ok_matches: bool = True
@@ -105,7 +114,8 @@ class Reporter:
         comparison_result: ComparisonResult,
         output_path: str | Path,
         include_summary: bool = True,
-        phase_config: 'PhaseConfig' = None
+        phase_config: 'PhaseConfig' = None,
+        report_type: str = "complete"
     ) -> Path:
         """
         Generate an Excel report.
@@ -117,13 +127,12 @@ class Reporter:
             include_summary: Whether to include a summary sheet (can be overridden by phase_config)
             phase_config: Optional phase configuration that controls which sheets to generate.
                          If None, generates all sheets (full analysis mode).
+            report_type: Type of report to generate:
+                        - "simple": Only Resumen + Discrepancias sheets
+                        - "complete": All sheets (default)
 
         Returns:
             Path to the generated report
-
-        Phase Support:
-            - QUICK_CHECK: Generates only Discrepàncies sheet
-            - FULL_ANALYSIS: Generates all sheets (Resumen, Discrepancias, etc.)
         """
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,12 +143,16 @@ class Reporter:
         if "Sheet" in wb.sheetnames:
             del wb["Sheet"]
 
-        # Determine which sheets to generate based on phase config
-        if phase_config is not None:
+        # Determine which sheets to generate based on report_type
+        if report_type == "simple":
+            # Simple report: only Resumen + Discrepancias
+            sheets_to_generate = {"Resumen", "Discrepancias"}
+            include_summary = True
+        elif phase_config is not None:
             sheets_to_generate = set(phase_config.sheets)
             include_summary = phase_config.include_summary
         else:
-            # Default to all sheets (full analysis)
+            # Default to all sheets (complete report)
             sheets_to_generate = {"Resumen", "Discrepancias", "Elementos Emparejados",
                                   "Sin Presupuestar", "Sin Modelar"}
 
@@ -147,24 +160,27 @@ class Reporter:
         if include_summary and ("Resumen" in sheets_to_generate or "Resum" in sheets_to_generate):
             self._create_summary_sheet(wb, match_result, comparison_result)
 
-        # Discrepancies sheet (always included in any phase)
+        # Discrepancies sheet (always included in any report type)
         if any(s in sheets_to_generate for s in ["Discrepancias", "Discrepàncies"]):
             self._create_conflicts_sheet(wb, comparison_result)
 
-        # Matched elements sheet
-        if "Elementos Emparejados" in sheets_to_generate:
-            self._create_matches_sheet(wb, match_result, comparison_result)
+        # For complete report only: additional detail sheets
+        if report_type != "simple":
+            # Matched elements sheet (supports both names)
+            if "Elementos Emparejados" in sheets_to_generate or "Coincidencias" in sheets_to_generate:
+                sheet_name = "Coincidencias" if "Coincidencias" in sheets_to_generate else "Elementos Emparejados"
+                self._create_matches_sheet(wb, match_result, comparison_result, sheet_name)
 
-        # Missing in budget sheet
-        if "Sin Presupuestar" in sheets_to_generate:
-            self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
+            # Missing in budget sheet
+            if "Sin Presupuestar" in sheets_to_generate:
+                self._create_missing_sheet(wb, match_result, "Sin Presupuestar", MatchStatus.IFC_ONLY)
 
-        # Missing in model sheet
-        if "Sin Modelar" in sheets_to_generate:
-            self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
+            # Missing in model sheet
+            if "Sin Modelar" in sheets_to_generate:
+                self._create_missing_sheet(wb, match_result, "Sin Modelar", MatchStatus.BC3_ONLY)
 
-        # Elements summary sheet (always last)
-        self._create_elements_summary_sheet(wb, match_result, comparison_result)
+            # Elements summary sheet (always last for complete reports)
+            self._create_elements_summary_sheet(wb, match_result, comparison_result)
 
         wb.save(output_path)
         return output_path
@@ -274,9 +290,13 @@ class Reporter:
 
         comp_stats = [
             ("Total de discrepancias", summary["total_conflicts"], self.config.color_info, "Numero total de diferencias encontradas"),
-            ("Errores (diferencias de valor)", summary["errors"], self.config.color_error if summary["errors"] > 0 else None, "Valores que no coinciden entre modelo y presupuesto"),
+            ("Errores (diferencias)", summary["errors"], self.config.color_error if summary["errors"] > 0 else None, "Valores que no coinciden entre modelo y presupuesto"),
             ("Avisos (elementos faltantes)", summary["warnings"], self.config.color_warning if summary["warnings"] > 0 else None, "Elementos que existen en uno pero no en otro"),
-            ("Discrepancias en propiedades", summary["property_mismatches"], None, "Propiedades con valores diferentes"),
+            # Phase 1 specific
+            ("Codigos diferentes", summary.get("code_mismatches", 0), self.config.color_code_mismatch if summary.get("code_mismatches", 0) > 0 else None, "Elementos emparejados por descripcion con codigos diferentes"),
+            ("Cantidades diferentes", summary.get("quantity_mismatches", 0), self.config.color_error if summary.get("quantity_mismatches", 0) > 0 else None, "Cantidades que no coinciden"),
+            # Phase 2 specific
+            ("Propiedades diferentes", summary.get("property_mismatches", 0), None, "Propiedades con valores diferentes"),
         ]
 
         row += 1
@@ -301,8 +321,9 @@ class Reporter:
 
         row += 1
         legend = [
-            (self.config.color_error, "Rojo", "Error - Requiere atencion inmediata"),
-            (self.config.color_warning, "Amarillo", "Aviso - Revisar"),
+            (self.config.color_error, "Rojo", "Error - Cantidad diferente, requiere atencion"),
+            (self.config.color_code_mismatch, "Naranja", "Codigo diferente - Emparejado por descripcion"),
+            (self.config.color_warning, "Amarillo", "Aviso - Elemento faltante, revisar"),
             (self.config.color_ok, "Verde", "Correcto - Sin problemas"),
         ]
 
@@ -347,9 +368,27 @@ class Reporter:
         ws.row_dimensions[1].height = 25
 
         # Filter conflicts
-        conflicts = comparison_result.conflicts
+        # Exclude MISSING_IN_BC3 and MISSING_IN_IFC - these have dedicated sheets
+        conflicts = [c for c in comparison_result.conflicts
+                     if c.conflict_type not in (ConflictType.MISSING_IN_BC3, ConflictType.MISSING_IN_IFC)]
         if not self.config.show_info_conflicts:
             conflicts = [c for c in conflicts if c.severity != ConflictSeverity.INFO]
+
+        # Sort conflicts by color: red first, then orange, then yellow (Issue #9)
+        # Red = ERROR (not code mismatch), Orange = CODE_MISMATCH, Yellow = WARNING
+        def conflict_sort_key(c):
+            # Determine color-based order
+            if c.severity == ConflictSeverity.ERROR and c.conflict_type != ConflictType.CODE_MISMATCH:
+                color_order = 0  # Red first
+            elif c.conflict_type == ConflictType.CODE_MISMATCH:
+                color_order = 1  # Orange second
+            elif c.severity == ConflictSeverity.WARNING:
+                color_order = 2  # Yellow third
+            else:
+                color_order = 3  # Info/other last
+            return (color_order, c.code or "")
+
+        conflicts = sorted(conflicts, key=conflict_sort_key)
 
         # Add conflict rows
         for row_num, conflict in enumerate(conflicts[:self.config.max_rows], 2):
@@ -367,8 +406,8 @@ class Reporter:
             ws.cell(row=row_num, column=7, value=str(conflict.bc3_value) if conflict.bc3_value is not None else "-")
             ws.cell(row=row_num, column=8, value=message_es)
 
-            # Color by severity
-            fill_color = self._get_severity_color(conflict.severity)
+            # Color by severity and conflict type (code mismatch = orange)
+            fill_color = self._get_severity_color(conflict.severity, conflict.conflict_type)
             for col in range(1, 9):
                 self._apply_cell_style(ws.cell(row=row_num, column=col), fill_color)
 
@@ -379,10 +418,11 @@ class Reporter:
         self,
         wb: Workbook,
         match_result: MatchResult,
-        comparison_result: ComparisonResult
+        comparison_result: ComparisonResult,
+        sheet_name: str = "Elementos Emparejados"
     ) -> None:
         """Create the matched elements sheet."""
-        ws = wb.create_sheet("Elementos Emparejados")
+        ws = wb.create_sheet(sheet_name)
 
         # Headers in Spanish
         headers = [
@@ -802,8 +842,12 @@ class Reporter:
         # Freeze header row
         ws.freeze_panes = "A2"
 
-    def _get_severity_color(self, severity: ConflictSeverity) -> str:
-        """Get the color for a severity level."""
+    def _get_severity_color(self, severity: ConflictSeverity, conflict_type: ConflictType = None) -> str:
+        """Get the color for a severity level and conflict type."""
+        # Special case: code mismatch gets orange
+        if conflict_type == ConflictType.CODE_MISMATCH:
+            return self.config.color_code_mismatch
+
         if severity == ConflictSeverity.ERROR:
             return self.config.color_error
         elif severity == ConflictSeverity.WARNING:

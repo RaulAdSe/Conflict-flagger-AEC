@@ -5,7 +5,148 @@ from pathlib import Path
 
 from src.parsers.bc3_parser import BC3Parser, BC3Element, BC3ParseResult
 from src.parsers.ifc_parser import IFCParser, IFCElement, IFCType, IFCParseResult
-from src.matching.matcher import Matcher, MatchMethod, MatchStatus, MatchedPair, MatchResult
+from src.matching.matcher import (
+    Matcher, MatchMethod, MatchStatus, MatchedPair, MatchResult,
+    normalize_description, calculate_similarity
+)
+from src.matching.filters import is_ignored_element, filter_elements, IGNORE_TERMS
+
+
+# =============================================================================
+# TESTS FOR SIMILARITY FUNCTIONS
+# =============================================================================
+
+class TestSimilarityFunctions:
+    """Tests for text similarity functions."""
+
+    def test_normalize_description_basic(self):
+        """Test basic normalization."""
+        assert normalize_description("Hello World") == "hello world"
+        assert normalize_description("UPPERCASE") == "uppercase"
+
+    def test_normalize_description_special_chars(self):
+        """Test removal of special characters."""
+        result = normalize_description("Pilar - 600 x 600 mm")
+        assert result == "pilar 600 x 600 mm"
+
+    def test_normalize_description_accents(self):
+        """Test preservation of accented characters."""
+        result = normalize_description("Jácena metálica")
+        assert "jácena" in result
+        assert "metálica" in result
+
+    def test_normalize_description_empty(self):
+        """Test empty/None handling."""
+        assert normalize_description("") == ""
+        assert normalize_description(None) == ""
+
+    def test_calculate_similarity_identical(self):
+        """Test similarity of identical descriptions."""
+        score = calculate_similarity(
+            "Pilar rectangular hormigón 600 x 600",
+            "Pilar rectangular hormigón 600 x 600"
+        )
+        assert score == 1.0
+
+    def test_calculate_similarity_similar(self):
+        """Test similarity of similar descriptions."""
+        score = calculate_similarity(
+            "Pilar rectangular hormigón 600 x 600 mm",
+            "Pilar rectangular hormigón - 600 x 600"
+        )
+        # Should be high (>0.7) due to shared words
+        assert score > 0.7
+
+    def test_calculate_similarity_different(self):
+        """Test similarity of different descriptions."""
+        score = calculate_similarity(
+            "Pilar hormigón",
+            "Ventana aluminio"
+        )
+        # Should be low (<0.3) due to no shared words
+        assert score < 0.3
+
+    def test_calculate_similarity_stopwords(self):
+        """Test that stopwords are ignored."""
+        # "de la el" are stopwords
+        score = calculate_similarity(
+            "Pilar de hormigón",
+            "Pilar hormigón"
+        )
+        # Should be high because "de" is ignored
+        assert score > 0.8
+
+    def test_calculate_similarity_empty(self):
+        """Test similarity with empty strings."""
+        assert calculate_similarity("", "test") == 0.0
+        assert calculate_similarity("test", "") == 0.0
+        assert calculate_similarity("", "") == 0.0
+
+
+# =============================================================================
+# TESTS FOR FILTERS
+# =============================================================================
+
+class TestFilters:
+    """Tests for element filters."""
+
+    def test_is_ignored_element_views(self):
+        """Test ignoring view-related elements."""
+        assert is_ignored_element(None, "Project Info") is True
+        assert is_ignored_element(None, "Vista de plano") is True
+        assert is_ignored_element(None, "Sheet 1") is True
+
+    def test_is_ignored_element_rooms(self):
+        """Test ignoring room-related elements."""
+        assert is_ignored_element(None, "Habitaciones") is True
+        assert is_ignored_element(None, "Zona de climatización") is True
+        assert is_ignored_element(None, "Áreas") is True
+
+    def test_is_ignored_element_openings(self):
+        """Test ignoring openings."""
+        assert is_ignored_element(None, "Opening") is True
+        assert is_ignored_element(None, "Hueco de ventana") is True
+        assert is_ignored_element(None, "Void cut") is True
+
+    def test_is_ignored_element_building_elements(self):
+        """Test that building elements are NOT ignored."""
+        assert is_ignored_element(None, "Pilar rectangular hormigón") is False
+        assert is_ignored_element(None, "Muro de ladrillo") is False
+        assert is_ignored_element(None, "Ventana de aluminio") is False
+        assert is_ignored_element("350147", "Jácena metálica") is False
+
+    def test_is_ignored_element_code_check(self):
+        """Test that code is also checked."""
+        # Even with normal description, if code contains ignore term
+        assert is_ignored_element("sheet_01", "Normal description") is True
+
+    def test_is_ignored_element_case_insensitive(self):
+        """Test case insensitivity."""
+        assert is_ignored_element(None, "PROJECT INFO") is True
+        assert is_ignored_element(None, "SHEET") is True
+
+    def test_filter_elements(self):
+        """Test filtering a dictionary of elements."""
+        # Create mock elements
+        class MockElement:
+            def __init__(self, code, description):
+                self.code = code
+                self.description = description
+
+        elements = {
+            "1": MockElement("1", "Pilar hormigón"),
+            "2": MockElement("2", "Project Info"),
+            "3": MockElement("3", "Muro ladrillo"),
+            "4": MockElement("4", "Sheet view"),
+        }
+
+        filtered = filter_elements(elements)
+
+        # Should only have building elements
+        assert "1" in filtered
+        assert "2" not in filtered
+        assert "3" in filtered
+        assert "4" not in filtered
 
 
 class TestMatchedPair:
@@ -277,6 +418,95 @@ class TestMatcher:
         assert summary["matched"] == 2
         assert summary["ifc_only"] == 1
         assert summary["bc3_only"] == 1
+
+    def test_match_by_description(self):
+        """Test matching by description similarity when codes differ."""
+        matcher = Matcher(match_by_description=True, similarity_threshold=0.5)
+
+        # IFC type with one code
+        ifc_types = {
+            "guid1": IFCType(
+                global_id="guid1",
+                tag="171671",  # Original code
+                name="Descansillo monolítico - 220mm Thickness",
+                ifc_class="IfcSlabType"
+            )
+        }
+        ifc_result = IFCParseResult(
+            elements={},
+            types=ifc_types,
+            elements_by_tag={},
+            types_by_tag={"171671": ifc_types["guid1"]},
+            schema="IFC2X3",
+            project_name="Test"
+        )
+
+        # BC3 element with DIFFERENT code but SIMILAR description
+        bc3_elements = {
+            "171999": BC3Element(  # Different code!
+                code="171999",
+                unit="u",
+                description="Descansillo monolítico - 220mm Thickness",
+                price=100.0
+            )
+        }
+        bc3_result = BC3ParseResult(
+            elements=bc3_elements,
+            hierarchy={},
+            version="test"
+        )
+
+        result = matcher.match(ifc_result, bc3_result)
+
+        # Should match by description since codes don't match
+        desc_matches = matcher.get_matched_by_method(result, MatchMethod.DESCRIPTION)
+        assert len(desc_matches) == 1
+        assert desc_matches[0].bc3_element.code == "171999"
+        assert desc_matches[0].ifc_type.tag == "171671"
+        assert desc_matches[0].confidence <= 0.8  # Description matches capped at 0.8
+
+    def test_match_by_description_disabled(self):
+        """Test that description matching can be disabled."""
+        matcher = Matcher(match_by_description=False)
+
+        ifc_types = {
+            "guid1": IFCType(
+                global_id="guid1",
+                tag="code1",
+                name="Similar Description Here",
+                ifc_class="IfcSlabType"
+            )
+        }
+        ifc_result = IFCParseResult(
+            elements={},
+            types=ifc_types,
+            elements_by_tag={},
+            types_by_tag={"code1": ifc_types["guid1"]},
+            schema="IFC2X3",
+            project_name="Test"
+        )
+
+        bc3_elements = {
+            "code2": BC3Element(
+                code="code2",
+                unit="u",
+                description="Similar Description Here",
+                price=100.0
+            )
+        }
+        bc3_result = BC3ParseResult(
+            elements=bc3_elements,
+            hierarchy={},
+            version="test"
+        )
+
+        result = matcher.match(ifc_result, bc3_result)
+
+        # Should NOT match when description matching is disabled
+        desc_matches = matcher.get_matched_by_method(result, MatchMethod.DESCRIPTION)
+        assert len(desc_matches) == 0
+        assert len(result.ifc_only) == 1
+        assert len(result.bc3_only) == 1
 
 
 class TestMatcherWithRealFiles:

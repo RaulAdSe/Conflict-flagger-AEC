@@ -5,8 +5,10 @@ Uses multiple strategies for robust matching:
 1. Primary: Tag (Revit Element ID) ↔ BC3 Code
 2. Secondary: IFC GlobalId ↔ BC3 Tipo IfcGUID
 3. Fallback: Family + Type name matching
+4. Fallback: Description similarity matching (Jaccard)
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -15,11 +17,78 @@ from src.parsers.bc3_parser import BC3Element, BC3ParseResult
 from src.parsers.ifc_parser import IFCElement, IFCType, IFCParseResult
 
 
+# =============================================================================
+# TEXT SIMILARITY FUNCTIONS (ported from Albert's implementation)
+# =============================================================================
+
+# Stopwords to ignore when comparing descriptions
+STOPWORDS = {
+    'de', 'la', 'el', 'en', 'con', 'para', 'por', 'a', 'y', 'o',
+    'mm', 'cm', 'm', 'm2', 'm3', 'the', 'of', 'and', 'in', 'to'
+}
+
+
+def normalize_description(desc: str) -> str:
+    """
+    Normalize a description for comparison.
+
+    - Converts to lowercase
+    - Removes special characters (keeps letters, numbers, accented chars, spaces)
+    - Normalizes whitespace
+
+    Args:
+        desc: The description to normalize
+
+    Returns:
+        Normalized description string
+    """
+    if not desc:
+        return ""
+    # Remove special characters, keep letters/numbers/accented chars/spaces
+    desc = re.sub(r'[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑüÜ\s]', ' ', desc.lower())
+    # Normalize whitespace
+    desc = ' '.join(desc.split())
+    return desc
+
+
+def calculate_similarity(desc1: str, desc2: str) -> float:
+    """
+    Calculate Jaccard similarity between two descriptions.
+
+    Jaccard similarity = |intersection| / |union|
+
+    Args:
+        desc1: First description
+        desc2: Second description
+
+    Returns:
+        Similarity score between 0.0 and 1.0
+    """
+    words1 = set(normalize_description(desc1).split())
+    words2 = set(normalize_description(desc2).split())
+
+    if not words1 or not words2:
+        return 0.0
+
+    # Remove stopwords
+    words1 = words1 - STOPWORDS
+    words2 = words2 - STOPWORDS
+
+    if not words1 or not words2:
+        return 0.0
+
+    intersection = len(words1 & words2)
+    union = len(words1 | words2)
+
+    return intersection / union if union > 0 else 0.0
+
+
 class MatchMethod(Enum):
     """How the match was determined."""
     TAG = "tag"  # Matched via Tag ↔ Code
     GUID = "guid"  # Matched via GlobalId ↔ Tipo IfcGUID
     NAME = "name"  # Matched via family/type name similarity
+    DESCRIPTION = "description"  # Matched via description similarity (Jaccard)
     NONE = "none"  # No match found
 
 
@@ -113,14 +182,26 @@ class MatchResult:
 class Matcher:
     """Matches IFC elements with BC3 elements."""
 
-    def __init__(self, match_by_name: bool = True):
+    # Default similarity threshold for description matching
+    DEFAULT_SIMILARITY_THRESHOLD = 0.5
+
+    def __init__(
+        self,
+        match_by_name: bool = True,
+        match_by_description: bool = True,
+        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD
+    ):
         """
         Initialize the matcher.
 
         Args:
             match_by_name: Whether to attempt name-based matching as fallback
+            match_by_description: Whether to attempt description similarity matching
+            similarity_threshold: Minimum Jaccard similarity for description matching (0-1)
         """
         self.match_by_name = match_by_name
+        self.match_by_description = match_by_description
+        self.similarity_threshold = similarity_threshold
 
     def match(self, ifc_result: IFCParseResult, bc3_result: BC3ParseResult) -> MatchResult:
         """
@@ -191,6 +272,14 @@ class Matcher:
         # Strategy 3: Match by name (optional, lower confidence)
         if self.match_by_name:
             self._match_by_name(
+                ifc_result, bc3_result,
+                matched_ifc_ids, matched_bc3_codes,
+                matched
+            )
+
+        # Strategy 4: Match by description similarity (Jaccard)
+        if self.match_by_description:
+            self._match_by_description(
                 ifc_result, bc3_result,
                 matched_ifc_ids, matched_bc3_codes,
                 matched
@@ -280,6 +369,72 @@ class Matcher:
                     matched.append(pair)
                     matched_ifc_ids.add(guid)
                     matched_bc3_codes.add(bc3_elem.code)
+
+    def _match_by_description(
+        self,
+        ifc_result: IFCParseResult,
+        bc3_result: BC3ParseResult,
+        matched_ifc_ids: set,
+        matched_bc3_codes: set,
+        matched: list
+    ) -> None:
+        """
+        Attempt to match remaining items by description similarity (Jaccard).
+
+        This strategy finds matches when BC3 and IFC use different codes
+        but have similar descriptions. Uses Jaccard similarity on normalized
+        description text.
+
+        Ported from Albert's implementation with improvements.
+        """
+        # Build description index for unmatched BC3 elements
+        bc3_by_desc = {}
+        for code, elem in bc3_result.elements.items():
+            if code in matched_bc3_codes:
+                continue
+            if elem.description:
+                bc3_by_desc[code] = elem
+
+        if not bc3_by_desc:
+            return
+
+        # Try to match unmatched IFC types by description
+        for guid, ifc_type in ifc_result.types.items():
+            if guid in matched_ifc_ids:
+                continue
+
+            ifc_desc = ifc_type.name  # IFC uses 'name' as description
+            if not ifc_desc:
+                continue
+
+            # Find best matching BC3 element by description similarity
+            best_match = None
+            best_score = 0.0
+            best_code = None
+
+            for bc3_code, bc3_elem in bc3_by_desc.items():
+                if bc3_code in matched_bc3_codes:
+                    continue
+
+                score = calculate_similarity(ifc_desc, bc3_elem.description)
+                if score >= self.similarity_threshold and score > best_score:
+                    best_score = score
+                    best_match = bc3_elem
+                    best_code = bc3_code
+
+            # If we found a match above threshold, use it
+            if best_match is not None:
+                pair = MatchedPair(
+                    status=MatchStatus.MATCHED,
+                    method=MatchMethod.DESCRIPTION,
+                    ifc_type=ifc_type,
+                    bc3_element=best_match,
+                    match_key=f"{ifc_type.tag or guid}↔{best_code}",
+                    confidence=min(0.8, best_score)  # Cap at 0.8 for description matches
+                )
+                matched.append(pair)
+                matched_ifc_ids.add(guid)
+                matched_bc3_codes.add(best_code)
 
     def get_matched_by_method(self, result: MatchResult, method: MatchMethod) -> list[MatchedPair]:
         """Get all matches that used a specific method."""
