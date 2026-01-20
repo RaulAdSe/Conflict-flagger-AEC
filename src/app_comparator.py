@@ -36,11 +36,12 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from datetime import datetime
 import os
 import sys
 import subprocess
+import threading
 from pathlib import Path
 
 # Try to import PIL for logo display
@@ -318,6 +319,71 @@ class ModernUploadZone(tk.Canvas):
                        style=tk.ARC, outline=color, width=2)
         self.create_arc(x1, y2 - 2*radius, x1 + 2*radius, y2, start=180, extent=90,
                        style=tk.ARC, outline=color, width=2)
+
+
+class ModernProgressBar(tk.Canvas):
+    """A modern progress bar widget using Canvas for reliable rendering."""
+
+    def __init__(self, parent, **kwargs):
+        # Extract our custom options
+        self.bar_width = kwargs.pop('bar_width', 440)
+        self.bar_height = kwargs.pop('bar_height', 12)
+
+        super().__init__(parent, **kwargs)
+
+        self.value = 0  # 0-100
+
+        # Colors
+        self.bg_color = kwargs.get('bg', '#FFFFFF')
+        self.trough_color = "#E8E8ED"
+        self.fill_color = "#0071E3"
+
+        self.configure(
+            width=self.bar_width,
+            height=self.bar_height,
+            highlightthickness=0,
+            bg=self.bg_color
+        )
+
+        self.draw()
+
+    def set_value(self, value):
+        """Set progress value (0-100)."""
+        self.value = max(0, min(100, value))
+        self.draw()
+
+    def draw(self):
+        """Draw the progress bar."""
+        self.delete("all")
+
+        w = self.bar_width
+        h = self.bar_height
+        radius = h // 2
+
+        # Draw trough (background)
+        self._draw_rounded_rect(0, 0, w, h, radius, self.trough_color)
+
+        # Draw fill (progress)
+        if self.value > 0:
+            fill_width = max(h, int(w * self.value / 100))  # Minimum width = height for rounded ends
+            self._draw_rounded_rect(0, 0, fill_width, h, radius, self.fill_color)
+
+    def _draw_rounded_rect(self, x1, y1, x2, y2, radius, color):
+        """Draw a filled rounded rectangle."""
+        if x2 - x1 < 2 * radius:
+            radius = (x2 - x1) // 2
+
+        # Main rectangle
+        self.create_rectangle(x1 + radius, y1, x2 - radius, y2, fill=color, outline=color)
+
+        # Left and right rectangles
+        if x2 - x1 > 2 * radius:
+            self.create_rectangle(x1, y1 + radius, x1 + radius, y2 - radius, fill=color, outline=color)
+            self.create_rectangle(x2 - radius, y1 + radius, x2, y2 - radius, fill=color, outline=color)
+
+        # Corner circles
+        self.create_oval(x1, y1, x1 + 2*radius, y2, fill=color, outline=color)
+        self.create_oval(x2 - 2*radius, y1, x2, y2, fill=color, outline=color)
 
 
 class ModernButton(tk.Canvas):
@@ -610,6 +676,15 @@ class ConflictFlaggerApp:
         )
         self.status_label.pack(pady=(15, 0))
 
+        # Custom progress bar using Canvas (always visible)
+        self.progress_bar = ModernProgressBar(
+            content,
+            bar_width=440,
+            bar_height=12,
+            bg=self.card_color
+        )
+        self.progress_bar.pack(pady=(10, 0))
+
     def _build_report_type_selector(self, parent, font_family):
         """
         Build the report type selection UI.
@@ -684,6 +759,24 @@ class ConflictFlaggerApp:
         self.status_label.config(text=msg)
         self.root.update()
 
+    def _show_progress(self):
+        """Reset the progress bar to 0."""
+        self.progress_bar.set_value(0)
+        self.root.update()
+
+    def _hide_progress(self):
+        """Reset the progress bar to 0 and clear status."""
+        self.progress_bar.set_value(0)
+        self.status_label.config(text="")
+        self.root.update()
+
+    def _set_progress(self, value, status_msg=None):
+        """Update the progress bar value (0-100) and optionally the status message."""
+        self.progress_bar.set_value(value)
+        if status_msg:
+            self.status_label.config(text=status_msg)
+        self.root.update()
+
     def load_ifc(self):
         """Open file dialog to select IFC file."""
         f = filedialog.askopenfilename(
@@ -756,66 +849,81 @@ class ConflictFlaggerApp:
         Always uses FULL_ANALYSIS phase. Report type controls which sheets:
         - simple: Only Resumen + Discrepancias
         - complete: All sheets
+
+        Uses threading to keep UI responsive during processing.
         """
         if not self.path_ifc.get() or not self.path_bc3.get():
             messagebox.showwarning("Warning", "Please select both files.")
             return
 
-        # Always use FULL_ANALYSIS phase
-        phase = Phase.FULL_ANALYSIS
-        phase_config = get_phase_config(phase)
-
         # Get report type
         report_type = self.report_type.get()  # "simple" or "complete"
         report_label = "Informe Simple" if report_type == "simple" else "Informe Complet"
 
-        self._set_status(f"Generant {report_label}...")
+        # Prepare UI for processing
         self.download_btn.set_text("Processant...")
         self.download_btn.set_active(False)
+        self._show_progress()
+        self._set_progress(0, f"Iniciant {report_label}...")
 
+        # Store paths for the worker thread
+        ifc_path = self.path_ifc.get()
+        bc3_path = self.path_bc3.get()
+
+        # Use after() to start the thread, giving UI time to update
+        def start_worker():
+            thread = threading.Thread(
+                target=self._run_generation_task,
+                args=(ifc_path, bc3_path, report_type, report_label),
+                daemon=True
+            )
+            thread.start()
+
+        self.root.after(100, start_worker)
+
+    def _run_generation_task(self, ifc_path, bc3_path, report_type, report_label):
+        """
+        Worker thread that performs the actual report generation.
+        Updates UI through thread-safe callbacks.
+        """
         try:
-            # Get a user-accessible output directory (works in both dev and built app)
+            # Always use FULL_ANALYSIS phase
+            phase = Phase.FULL_ANALYSIS
+            phase_config = get_phase_config(phase)
+
+            # Get a user-accessible output directory
             output_dir = self._get_output_directory()
 
-            # 1. Parse IFC file using IFCParser
-            self._set_status("Analyzing IFC file...")
-            self.root.update()
+            # 1. Parse IFC file using IFCParser (0% -> 20%)
+            self.root.after(0, lambda: self._set_progress(5, "Analitzant fitxer IFC..."))
             ifc_parser = IFCParser()
-            ifc_result = ifc_parser.parse(self.path_ifc.get())
-            self._set_status(f"IFC: {len(ifc_result.types)} types, {len(ifc_result.elements)} elements")
-            self.root.update()
+            ifc_result = ifc_parser.parse(ifc_path)
+            self.root.after(0, lambda: self._set_progress(20, f"IFC: {len(ifc_result.types)} tipus, {len(ifc_result.elements)} elements"))
 
-            # 2. Parse BC3 file using BC3Parser
-            self._set_status("Analyzing BC3 file...")
-            self.root.update()
+            # 2. Parse BC3 file using BC3Parser (20% -> 40%)
+            self.root.after(0, lambda: self._set_progress(25, "Analitzant fitxer BC3..."))
             bc3_parser = BC3Parser()
-            bc3_result = bc3_parser.parse(self.path_bc3.get())
-            self._set_status(f"BC3: {len(bc3_result.elements)} items loaded")
-            self.root.update()
+            bc3_result = bc3_parser.parse(bc3_path)
+            self.root.after(0, lambda: self._set_progress(40, f"BC3: {len(bc3_result.elements)} elements carregats"))
 
-            # 3. Match elements using Matcher
-            self._set_status("Matching IFC elements with BC3 items...")
-            self.root.update()
+            # 3. Match elements using Matcher (40% -> 60%)
+            self.root.after(0, lambda: self._set_progress(45, "Emparellant elements IFC amb BC3..."))
             matcher = Matcher(match_by_name=True)
             match_result = matcher.match(ifc_result, bc3_result)
-            self._set_status(f"Matched: {len(match_result.matched)}")
-            self.root.update()
+            self.root.after(0, lambda: self._set_progress(60, f"Emparellats: {len(match_result.matched)} elements"))
 
-            # 4. Compare matched elements using Comparator (configured by phase)
-            self._set_status("Comparing elements...")
-            self.root.update()
+            # 4. Compare matched elements using Comparator (60% -> 80%)
+            self.root.after(0, lambda: self._set_progress(65, "Comparant elements..."))
             comparator = Comparator(
                 tolerance=phase_config.quantity_tolerance,
                 compare_names=phase_config.check_names
             )
             comparison_result = comparator.compare(match_result, phase_config)
             summary = comparison_result.summary()
-            self._set_status(f"Conflicts: {summary['total_conflicts']}")
-            self.root.update()
+            self.root.after(0, lambda: self._set_progress(80, f"Discrepàncies trobades: {summary['total_conflicts']}"))
 
-            # 5. Generate report using Reporter (configured by report type)
-            self._set_status("Generant informe Excel...")
-            self.root.update()
+            # 5. Generate report using Reporter (80% -> 100%)
+            self.root.after(0, lambda: self._set_progress(85, "Generant informe Excel..."))
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             type_suffix = "simple" if report_type == "simple" else "complet"
             output_path = output_dir / f"Report_AEC_{type_suffix}_{timestamp}.xlsx"
@@ -829,35 +937,53 @@ class ConflictFlaggerApp:
                 report_type=report_type
             )
 
-            self._set_status(f"Informe guardat correctament")
+            self.root.after(0, lambda: self._set_progress(100, "Informe guardat correctament!"))
 
-            # Show success message with summary (in Catalan)
-            messagebox.showinfo(
-                "Informe Generat",
-                f"L'informe s'ha generat correctament!\n\n"
-                f"Tipus d'informe: {report_label}\n\n"
-                f"Emparellats: {len(match_result.matched)} elements\n"
-                f"Nomes a IFC (sense pressupostar): {len(match_result.ifc_only)}\n"
-                f"Nomes a BC3 (sense modelar): {len(match_result.bc3_only)}\n\n"
-                f"Discrepancies trobades: {summary['total_conflicts']}\n"
-                f"  - Errors: {summary['errors']}\n"
-                f"  - Avisos: {summary['warnings']}\n\n"
-                f"Fitxer guardat a: {report_path}"
-            )
-
-            # Try to open the file (cross-platform)
-            self._open_file_cross_platform(report_path)
+            # Schedule success handling on main thread
+            self.root.after(0, lambda: self._on_generation_success(
+                report_path, report_label, match_result, summary
+            ))
 
         except FileNotFoundError as e:
-            self._set_status(f"Error: File not found")
-            messagebox.showerror("Error", f"File not found:\n{e}")
+            self.root.after(0, lambda: self._on_generation_error(
+                "Error: Fitxer no trobat", f"Fitxer no trobat:\n{e}"
+            ))
         except Exception as e:
-            self._set_status(f"Error during analysis")
-            messagebox.showerror("Error", f"Could not complete analysis:\n{e}")
-        finally:
-            # Restore button state
-            self.download_btn.set_text("Descarrega Excel")
-            self._update_button_state()
+            self.root.after(0, lambda: self._on_generation_error(
+                "Error durant l'anàlisi", f"No s'ha pogut completar l'anàlisi:\n{e}"
+            ))
+
+    def _on_generation_success(self, report_path, report_label, match_result, summary):
+        """Handle successful report generation (called on main thread)."""
+        # Hide progress bar and restore button
+        self._hide_progress()
+        self.download_btn.set_text("Descarrega Excel")
+        self._update_button_state()
+
+        # Show success message with summary (in Catalan)
+        messagebox.showinfo(
+            "Informe Generat",
+            f"L'informe s'ha generat correctament!\n\n"
+            f"Tipus d'informe: {report_label}\n\n"
+            f"Emparellats: {len(match_result.matched)} elements\n"
+            f"Nomes a IFC (sense pressupostar): {len(match_result.ifc_only)}\n"
+            f"Nomes a BC3 (sense modelar): {len(match_result.bc3_only)}\n\n"
+            f"Discrepancies trobades: {summary['total_conflicts']}\n"
+            f"  - Errors: {summary['errors']}\n"
+            f"  - Avisos: {summary['warnings']}\n\n"
+            f"Fitxer guardat a: {report_path}"
+        )
+
+        # Try to open the file (cross-platform)
+        self._open_file_cross_platform(report_path)
+
+    def _on_generation_error(self, status_msg, error_msg):
+        """Handle generation error (called on main thread)."""
+        self._hide_progress()
+        self._set_status(status_msg)
+        self.download_btn.set_text("Descarrega Excel")
+        self._update_button_state()
+        messagebox.showerror("Error", error_msg)
 
     def _open_file_cross_platform(self, file_path):
         """

@@ -23,14 +23,24 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from src.matching.matcher import MatchResult, MatchedPair, MatchStatus
-from src.comparison.comparator import (
-    ComparisonResult, Conflict, ConflictType, ConflictSeverity
-)
+# Try absolute imports first, fall back to relative for local execution
+try:
+    from src.matching.matcher import MatchResult, MatchedPair, MatchStatus
+    from src.comparison.comparator import (
+        ComparisonResult, Conflict, ConflictType, ConflictSeverity
+    )
+except ImportError:
+    from matching.matcher import MatchResult, MatchedPair, MatchStatus
+    from comparison.comparator import (
+        ComparisonResult, Conflict, ConflictType, ConflictSeverity
+    )
 
 # Import PhaseConfig only for type checking to avoid circular imports
 if TYPE_CHECKING:
-    from src.phases.config import PhaseConfig
+    try:
+        from src.phases.config import PhaseConfig
+    except ImportError:
+        from phases.config import PhaseConfig
 
 
 # Spanish translations for conflict types and messages
@@ -374,19 +384,19 @@ class Reporter:
         if not self.config.show_info_conflicts:
             conflicts = [c for c in conflicts if c.severity != ConflictSeverity.INFO]
 
-        # Sort conflicts by color: red first, then orange, then yellow (Issue #9)
-        # Red = ERROR (not code mismatch), Orange = CODE_MISMATCH, Yellow = WARNING
+        # Sort conflicts by color: red first, then orange (incomplete export), then yellow
+        # Red = ERROR, Orange = incomplete IFC export warnings, Yellow = other warnings
         def conflict_sort_key(c):
             # Determine color-based order
-            if c.severity == ConflictSeverity.ERROR and c.conflict_type != ConflictType.CODE_MISMATCH:
-                color_order = 0  # Red first
-            elif c.conflict_type == ConflictType.CODE_MISMATCH:
-                color_order = 1  # Orange second
+            if c.severity == ConflictSeverity.ERROR:
+                color_order = 0  # Red first (errors)
+            elif self._is_incomplete_export_warning(c):
+                color_order = 1  # Orange second (incomplete export warnings)
             elif c.severity == ConflictSeverity.WARNING:
-                color_order = 2  # Yellow third
+                color_order = 2  # Yellow third (other warnings)
             else:
                 color_order = 3  # Info/other last
-            return (color_order, c.code or "")
+            return (color_order, c.element_code or "")
 
         conflicts = sorted(conflicts, key=conflict_sort_key)
 
@@ -395,9 +405,9 @@ class Reporter:
             # Translate values
             conflict_type_es = translate(conflict.conflict_type.value)
             severity_es = translate(conflict.severity.value)
-            message_es = translate(conflict.message)
+            message_es = translate(conflict.description)
 
-            ws.cell(row=row_num, column=1, value=conflict.code or "")
+            ws.cell(row=row_num, column=1, value=conflict.element_code or "")
             ws.cell(row=row_num, column=2, value=conflict.element_name)
             ws.cell(row=row_num, column=3, value=conflict_type_es)
             ws.cell(row=row_num, column=4, value=severity_es)
@@ -406,8 +416,8 @@ class Reporter:
             ws.cell(row=row_num, column=7, value=str(conflict.bc3_value) if conflict.bc3_value is not None else "-")
             ws.cell(row=row_num, column=8, value=message_es)
 
-            # Color by severity and conflict type (code mismatch = orange)
-            fill_color = self._get_severity_color(conflict.severity, conflict.conflict_type)
+            # Color by severity and conflict type (incomplete export = orange)
+            fill_color = self._get_severity_color(conflict.severity, conflict.conflict_type, conflict)
             for col in range(1, 9):
                 self._apply_cell_style(ws.cell(row=row_num, column=col), fill_color)
 
@@ -444,15 +454,21 @@ class Reporter:
         # Build conflict count map
         conflict_counts = {}
         for conflict in comparison_result.conflicts:
-            if conflict.code:
-                conflict_counts[conflict.code] = conflict_counts.get(conflict.code, 0) + 1
+            if conflict.element_code:
+                conflict_counts[conflict.element_code] = conflict_counts.get(conflict.element_code, 0) + 1
 
         # Add matched rows
         for row_num, pair in enumerate(match_result.matched[:self.config.max_rows], 2):
-            code = pair.code or ""
+            code = pair.bc3_element.code if pair.bc3_element else (pair.ifc_type.tag if pair.ifc_type else "")
             ifc_name = pair.ifc_type.name if pair.ifc_type else ""
             bc3_desc = pair.bc3_element.description if pair.bc3_element else ""
-            method = translate(pair.method.value)
+            
+            # Handle match method which can be Enum or str
+            method_val = pair.match_method
+            if hasattr(method_val, 'value'):
+                method_val = method_val.value
+            method = translate(str(method_val))
+
             num_conflicts = conflict_counts.get(code, 0)
 
             if num_conflicts == 0:
@@ -517,17 +533,19 @@ class Reporter:
         ws.row_dimensions[1].height = 25
 
         # Add rows
-        for row_num, pair in enumerate(items[:self.config.max_rows], 2):
-            if status == MatchStatus.IFC_ONLY and pair.ifc_type:
-                ifc = pair.ifc_type
+        for row_num, item in enumerate(items[:self.config.max_rows], 2):
+            if status == MatchStatus.IFC_ONLY:
+                # item is IFCType directly
+                ifc = item
                 ws.cell(row=row_num, column=1, value=ifc.tag or ifc.global_id)
                 ws.cell(row=row_num, column=2, value=ifc.name)
                 ws.cell(row=row_num, column=3, value=ifc.ifc_class)
                 ws.cell(row=row_num, column=4, value=ifc.family_name or "-")
                 ws.cell(row=row_num, column=5, value=ifc.type_name or "-")
                 ws.cell(row=row_num, column=6, value=action_text)
-            elif status == MatchStatus.BC3_ONLY and pair.bc3_element:
-                bc3 = pair.bc3_element
+            elif status == MatchStatus.BC3_ONLY:
+                # item is BC3Element directly
+                bc3 = item
                 ws.cell(row=row_num, column=1, value=bc3.code)
                 ws.cell(row=row_num, column=2, value=bc3.description)
                 ws.cell(row=row_num, column=3, value=bc3.unit)
@@ -558,15 +576,15 @@ class Reporter:
             if pair.bc3_element and pair.bc3_element.properties:
                 property_names.update(pair.bc3_element.properties.keys())
 
-        # From IFC-only elements
-        for pair in match_result.ifc_only:
-            if pair.ifc_type and pair.ifc_type.properties:
-                property_names.update(pair.ifc_type.properties.keys())
+        # From IFC-only elements (these are IFCType objects directly)
+        for ifc_type in match_result.ifc_only:
+            if ifc_type.properties:
+                property_names.update(ifc_type.properties.keys())
 
-        # From BC3-only elements
-        for pair in match_result.bc3_only:
-            if pair.bc3_element and pair.bc3_element.properties:
-                property_names.update(pair.bc3_element.properties.keys())
+        # From BC3-only elements (these are BC3Element objects directly)
+        for bc3_elem in match_result.bc3_only:
+            if bc3_elem.properties:
+                property_names.update(bc3_elem.properties.keys())
 
         return sorted(property_names)
 
@@ -598,7 +616,7 @@ class Reporter:
 
         for code in codes:
             for conflict in comparison_result.conflicts:
-                if conflict.code == code:
+                if conflict.element_code == code:
                     if conflict.severity == ConflictSeverity.ERROR:
                         total_errors += 1
                     elif conflict.severity == ConflictSeverity.WARNING:
@@ -653,9 +671,26 @@ class Reporter:
         # Key: tuple of (family, name, ifc_class, type_name, unit, price, origin, frozen_properties)
         groups: dict[tuple, dict] = {}
 
-        def process_pair(pair: MatchedPair, status: MatchStatus):
-            ifc = pair.ifc_type
-            bc3 = pair.bc3_element
+        def process_pair(item, status: MatchStatus):
+            # Handle different input types:
+            # - MatchedPair for matched items
+            # - IFCType directly for ifc_only
+            # - BC3Element directly for bc3_only
+            if status == MatchStatus.MATCHED:
+                # item is MatchedPair
+                ifc = item.ifc_type
+                bc3 = item.bc3_element
+                code = bc3.code if bc3 else (ifc.tag if ifc else "")
+            elif status == MatchStatus.IFC_ONLY:
+                # item is IFCType directly
+                ifc = item
+                bc3 = None
+                code = ifc.tag or ifc.global_id[:8]
+            else:  # BC3_ONLY
+                # item is BC3Element directly
+                ifc = None
+                bc3 = item
+                code = bc3.code
 
             # Extract data with IFC priority
             family = (ifc.family_name if ifc and ifc.family_name else
@@ -714,9 +749,6 @@ class Reporter:
                 frozen_props
             )
 
-            # Get code for conflict tracking
-            code = pair.code or ""
-
             if group_key in groups:
                 groups[group_key]['quantity'] += quantity
                 groups[group_key]['codes'].append(code)
@@ -735,15 +767,15 @@ class Reporter:
                     'codes': [code]
                 }
 
-        # Process all pairs
+        # Process all items
         for pair in match_result.matched:
             process_pair(pair, MatchStatus.MATCHED)
 
-        for pair in match_result.ifc_only:
-            process_pair(pair, MatchStatus.IFC_ONLY)
+        for ifc_type in match_result.ifc_only:
+            process_pair(ifc_type, MatchStatus.IFC_ONLY)
 
-        for pair in match_result.bc3_only:
-            process_pair(pair, MatchStatus.BC3_ONLY)
+        for bc3_elem in match_result.bc3_only:
+            process_pair(bc3_elem, MatchStatus.BC3_ONLY)
 
         # Convert groups to list and add status
         rows = []
@@ -842,11 +874,21 @@ class Reporter:
         # Freeze header row
         ws.freeze_panes = "A2"
 
-    def _get_severity_color(self, severity: ConflictSeverity, conflict_type: ConflictType = None) -> str:
+    def _is_incomplete_export_warning(self, conflict) -> bool:
+        """Check if a conflict is an incomplete IFC export warning."""
+        return (conflict.severity == ConflictSeverity.WARNING and
+                conflict.description and
+                conflict.description.startswith("Exportación IFC incompleta"))
+
+    def _get_severity_color(self, severity: ConflictSeverity, conflict_type: ConflictType = None, conflict = None) -> str:
         """Get the color for a severity level and conflict type."""
         # Special case: code mismatch gets orange
         if conflict_type == ConflictType.CODE_MISMATCH:
             return self.config.color_code_mismatch
+
+        # Special case: incomplete IFC export warnings get orange
+        if conflict and self._is_incomplete_export_warning(conflict):
+            return self.config.color_code_mismatch  # Orange
 
         if severity == ConflictSeverity.ERROR:
             return self.config.color_error
@@ -886,31 +928,31 @@ class Reporter:
             },
             "discrepancias": [
                 {
-                    "codigo": c.code,
+                    "codigo": c.element_code,
                     "elemento": c.element_name,
                     "tipo": translate(c.conflict_type.value),
                     "gravedad": translate(c.severity.value),
                     "propiedad": c.property_name,
                     "valor_ifc": str(c.ifc_value) if c.ifc_value is not None else None,
                     "valor_bc3": str(c.bc3_value) if c.bc3_value is not None else None,
-                    "mensaje": translate(c.message)
+                    "mensaje": c.description
                 }
                 for c in comparison_result.conflicts
             ],
             "emparejados": [
                 {
-                    "codigo": p.code,
-                    "metodo": translate(p.method.value),
-                    "confianza": p.confidence
+                    "codigo": p.bc3_element.code if p.bc3_element else (p.ifc_type.tag or ""),
+                    "metodo": translate(p.match_method.value if hasattr(p.match_method, "value") else str(p.match_method)),
+                    "confianza": p.match_score
                 }
                 for p in match_result.matched
             ],
             "solo_ifc": [
-                {"codigo": p.code, "nombre": p.name}
-                for p in match_result.ifc_only
+                {"codigo": t.tag or t.global_id[:8], "nombre": t.name}
+                for t in match_result.ifc_only
             ],
             "solo_bc3": [
-                {"codigo": p.code, "nombre": p.name}
-                for p in match_result.bc3_only
+                {"codigo": e.code, "nombre": e.description}
+                for e in match_result.bc3_only
             ]
         }

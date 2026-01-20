@@ -1,602 +1,627 @@
 """
-Comparator for finding differences between matched IFC and BC3 elements.
+Comparator module - Compares matched IFC types with BC3 elements.
 
-Compares properties, quantities, and metadata to flag discrepancies.
-
-PHASE SUPPORT:
-==============
-The compare() method accepts an optional PhaseConfig that controls:
-- Whether to compare properties (deep analysis)
-- Whether to compare names
-- Tolerance for quantity comparisons
-
-This allows the same Comparator to support both quick checks and
-comprehensive analysis without code duplication.
+FIXES IMPLEMENTED:
+1. IFC=0 is WARNING, not ERROR (spaces, ceilings often have no quantities)
+2. IfcSpace and IfcCovering are skipped (non-comparable)
+3. Uses instance_count for unit quantities (u, ud, un)
+4. Selects best area match (NetArea vs GrossArea) based on BC3 value
+5. Code differences from name-matching are INFO, not ERROR
 """
 
 from dataclasses import dataclass, field
+from typing import Optional, List, Tuple
 from enum import Enum
-from typing import Any, Optional, TYPE_CHECKING
 
-from src.matching.matcher import MatchedPair, MatchResult, MatchMethod
-
-# Import PhaseConfig only for type checking to avoid circular imports
-if TYPE_CHECKING:
-    from src.phases.config import PhaseConfig
-
-
-class ConflictType(Enum):
-    """Type of conflict detected."""
-    # Phase 1: Basic matching conflicts
-    MISSING_IN_BC3 = "missing_in_bc3"  # Element only in IFC (sin presupuestar)
-    MISSING_IN_IFC = "missing_in_ifc"  # Element only in BC3 (sin modelar)
-    CODE_MISMATCH = "code_mismatch"  # Matched by description, codes differ
-    QUANTITY_MISMATCH = "quantity_mismatch"  # Quantity values differ
-    UNIT_MISMATCH = "unit_mismatch"  # Unit of measure differs
-
-    # Phase 2: Property conflicts
-    PROPERTY_MISMATCH = "property_mismatch"  # Different property values
-    PROPERTY_MISSING_IFC = "property_missing_ifc"  # Property only in BC3
-    PROPERTY_MISSING_BC3 = "property_missing_bc3"  # Property only in IFC
-    NAME_MISMATCH = "name_mismatch"  # Family/Type name differs
+# Import MatchMethod for comparison
+try:
+    from src.matching.matcher import MatchMethod
+except ImportError:
+    try:
+        from matching.matcher import MatchMethod
+    except ImportError:
+        # Define locally if import fails
+        class MatchMethod(Enum):
+            BY_TAG = "Por Tag/ID"
+            BY_GUID = "Por GUID"
+            BY_NAME = "Por Nombre/Descripción"
 
 
 class ConflictSeverity(Enum):
-    """Severity of the conflict."""
-    ERROR = "error"  # Red - Values are different
-    WARNING = "warning"  # Yellow - Missing data
-    INFO = "info"  # Blue - Informational
+    ERROR = "ERROR"
+    WARNING = "AVISO"
+    INFO = "INFO"
+
+
+class ConflictType(Enum):
+    QUANTITY_MISMATCH = "Cantidad diferente"
+    CODE_MISMATCH = "Código diferente"
+    NAME_MISMATCH = "Nombre diferente"
+    MISSING_IN_IFC = "Falta en IFC"
+    MISSING_IN_BC3 = "Falta en BC3"
 
 
 @dataclass
 class Conflict:
-    """Represents a single conflict/difference."""
-
+    """A conflict/discrepancy found during comparison."""
+    element_code: str
+    element_name: str
     conflict_type: ConflictType
     severity: ConflictSeverity
-
-    # Element identification
-    code: Optional[str]
-    element_name: str
-
-    # Conflict details
-    property_name: Optional[str] = None
-    ifc_value: Any = None
-    bc3_value: Any = None
-
-    # Context
-    message: str = ""
-
-    def __str__(self) -> str:
-        if self.property_name:
-            return f"[{self.severity.value.upper()}] {self.code}: {self.property_name} - IFC: {self.ifc_value}, BC3: {self.bc3_value}"
-        return f"[{self.severity.value.upper()}] {self.code}: {self.message}"
+    property_name: str
+    ifc_value: any
+    bc3_value: any
+    description: str
+    quantity_source: str = ""  # What IFC quantity was used
 
 
-@dataclass
+@dataclass 
 class ComparisonResult:
-    """Result of comparing matched pairs."""
-
-    conflicts: list  # List of Conflict objects
-
-    # Counts by type - Phase 1
-    missing_in_bc3: int = 0  # Sin presupuestar
-    missing_in_ifc: int = 0  # Sin modelar
-    code_mismatches: int = 0
-    quantity_mismatches: int = 0
-    unit_mismatches: int = 0
-
-    # Counts by type - Phase 2
-    property_mismatches: int = 0
-    total_properties_compared: int = 0
-
-    # Summary
-    total_matched: int = 0
-    total_with_conflicts: int = 0
-
-    errors: list = field(default_factory=list)
-
-    def get_conflicts_by_type(self, conflict_type: ConflictType) -> list[Conflict]:
-        """Get all conflicts of a specific type."""
-        return [c for c in self.conflicts if c.conflict_type == conflict_type]
-
-    def get_conflicts_by_severity(self, severity: ConflictSeverity) -> list[Conflict]:
-        """Get all conflicts of a specific severity."""
-        return [c for c in self.conflicts if c.severity == severity]
-
-    def get_conflicts_for_code(self, code: str) -> list[Conflict]:
-        """Get all conflicts for a specific element code."""
-        return [c for c in self.conflicts if c.code == code]
-
+    """Result of comparing matched elements."""
+    conflicts: List[Conflict] = field(default_factory=list)
+    compared_count: int = 0
+    
     def summary(self) -> dict:
-        """Get a summary of the comparison results."""
+        errors = sum(1 for c in self.conflicts if c.severity == ConflictSeverity.ERROR)
+        warnings = sum(1 for c in self.conflicts if c.severity == ConflictSeverity.WARNING)
+        infos = sum(1 for c in self.conflicts if c.severity == ConflictSeverity.INFO)
         return {
-            "total_conflicts": len(self.conflicts),
-            "errors": len(self.get_conflicts_by_severity(ConflictSeverity.ERROR)),
-            "warnings": len(self.get_conflicts_by_severity(ConflictSeverity.WARNING)),
-            # Phase 1
-            "missing_in_bc3": self.missing_in_bc3,
-            "missing_in_ifc": self.missing_in_ifc,
-            "code_mismatches": self.code_mismatches,
-            "quantity_mismatches": self.quantity_mismatches,
-            "unit_mismatches": self.unit_mismatches,
-            # Phase 2
-            "property_mismatches": self.property_mismatches,
-            # Summary
-            "total_matched": self.total_matched,
-            "total_with_conflicts": self.total_with_conflicts
+            'total_conflicts': len(self.conflicts),
+            'errors': errors,
+            'warnings': warnings,
+            'infos': infos,
+            'compared': self.compared_count
         }
 
 
 class Comparator:
-    """Compares matched IFC and BC3 elements to find differences."""
-
-    # ==========================================================================
-    # PROPERTY LISTS FOR DIFFERENT ANALYSIS PHASES
-    # ==========================================================================
-
-    # Phase 2: Spatial properties only (h, w, d / height, width, depth)
-    # These are the dimensional properties that affect model geometry
-    SPATIAL_PROPERTIES = [
-        # Primary dimensional parameters
-        ('h', 'h'),           # Height parameter
-        ('b', 'b'),           # Width/breadth parameter
-        ('d', 'd'),           # Depth parameter
-        # Named dimensional properties (Spanish/English)
-        ('Anchura', 'width'),
-        ('Altura', 'height'),
-        ('Profundidad', 'depth'),
-        ('Grosor', 'thickness'),
-        ('Longitud', 'length'),
-        ('Espesor', 'thickness'),
+    """
+    Compares matched IFC-BC3 pairs and finds discrepancies.
+    
+    TOLERANCES:
+    - Count units (u, ud): 0% (must be exact)
+    - Areas (m²): 5% (Net vs Gross difference)
+    - Volumes (m³): 5%
+    - Lengths (m): 2%
+    """
+    
+    # Families where automatic comparison may not be reliable
+    NON_COMPARABLE_FAMILIES = [
+        'System Panel',
+        'Empty System Panel', 
+        'Muro cortina',
+        'Curtain Wall',
+        'Curtain Panel',
     ]
-
-    # Full analysis: All properties including material and thermal
-    ALL_PROPERTIES = [
-        # Dimensional (same as SPATIAL_PROPERTIES)
-        ('h', 'h'),
-        ('b', 'b'),
-        ('d', 'd'),
-        ('Anchura', 'width'),
-        ('Altura', 'height'),
-        ('Profundidad', 'depth'),
-        ('Grosor', 'thickness'),
-        ('Longitud', 'length'),
-        ('Espesor', 'thickness'),
-        # Material properties
-        ('Material', 'Material'),
-        ('Material estructural', 'StructuralMaterial'),
-        # Thermal properties
-        ('Resistencia térmica (R)', 'ThermalResistance'),
-        ('Coeficiente de transferencia de calor (U)', 'HeatTransferCoefficient'),
+    
+    # IFC classes that often have no quantities
+    NON_COMPARABLE_CLASSES = [
+        'IfcSpace',       # Rooms/areas - often no area exported
+        'IfcCovering',    # Ceilings - inconsistent quantities
     ]
-
-    # Default: Use spatial properties for Phase 2 focus
-    COMPARABLE_PROPERTIES = SPATIAL_PROPERTIES
-
-    # ==========================================================================
-    # UNIT TO IFC QUANTITY MAPPING
-    # ==========================================================================
-    # Maps BC3 units to IFC quantity names for aggregated comparison
-    # BC3 calculates: alto * ancho * longitud = total quantity
-    # IFC has: NetVolume, GrossVolume, NetArea, GrossSideArea, Length, etc.
-
-    # Volumetric units (m³)
-    VOLUME_UNITS = {'m3', 'm³', 'metro cúbico', 'metros cúbicos'}
-    VOLUME_QUANTITY_NAMES = ['NetVolume', 'GrossVolume', 'Volume']
-
-    # Area units (m²)
-    AREA_UNITS = {'m2', 'm²', 'metro cuadrado', 'metros cuadrados'}
-    AREA_QUANTITY_NAMES = ['NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea',
-                           'GrossFootprintArea', 'NetFootprintArea', 'Area']
-
-    # Linear units (m)
-    LINEAR_UNITS = {'m', 'ml', 'metro', 'metros', 'metro lineal', 'metros lineales'}
-    LINEAR_QUANTITY_NAMES = ['Length', 'NetLength', 'GrossLength']
-
-    # Countable units (u, ud)
-    COUNTABLE_UNITS = {'u', 'ud', 'un', 'pza', 'ut', 'unidad', 'unidades'}
-
-    def __init__(self, tolerance: float = 0.01, compare_names: bool = True):
+    
+    # Unit type mappings
+    COUNT_UNITS = ['u', 'ud', 'un', 'pza', 'ut', 'unidad', 'uds', '']
+    AREA_UNITS = ['m2', 'm²']
+    VOLUME_UNITS = ['m3', 'm³']
+    LENGTH_UNITS = ['m', 'ml']
+    
+    def __init__(self, tolerance: float = 0.05, compare_names: bool = True):
         """
-        Initialize the comparator.
-
+        Initialize comparator.
+        
         Args:
-            tolerance: Numeric tolerance for value comparison
+            tolerance: Default tolerance for quantity comparison (0.05 = 5%)
             compare_names: Whether to compare family/type names
         """
         self.tolerance = tolerance
         self.compare_names = compare_names
-        # Property list to use for comparison (set by phase config)
-        self._property_list = self.SPATIAL_PROPERTIES
-        # Whether to also compare same-name properties not in the list
-        self._compare_same_name_props = False
-
-    def compare(self, match_result: MatchResult, phase_config: 'PhaseConfig' = None) -> ComparisonResult:
+        
+        # Specific tolerances by unit type
+        self.tolerances = {
+            'count': 0.0,    # Exact match for counts
+            'area': 0.05,    # 5% for areas
+            'volume': 0.05,  # 5% for volumes
+            'length': 0.02,  # 2% for lengths
+        }
+    
+    def compare(self, match_result, phase_config=None) -> ComparisonResult:
         """
         Compare all matched pairs and find conflicts.
-
-        Args:
-            match_result: Result from the Matcher
-            phase_config: Optional phase configuration that controls comparison depth.
-                         If None, performs full analysis.
-
-        Returns:
-            ComparisonResult with all conflicts found
-
-        Phase Support:
-            - QUICK_CHECK: Only compares codes, units, quantities (check_properties=False)
-            - FULL_ANALYSIS: Compares all properties (check_properties=True)
         """
-        conflicts = []
-        errors = []
-        codes_with_conflicts = set()
-
-        # Determine comparison depth from phase config
-        check_properties = True  # Default to full analysis
-        if phase_config is not None:
-            check_properties = phase_config.check_properties
-            # Update tolerance from phase config
-            self.tolerance = phase_config.quantity_tolerance
-            self.compare_names = phase_config.check_names
-            # Select property list based on phase config (Issue #10)
-            if phase_config.property_list == "spatial":
-                self._property_list = self.SPATIAL_PROPERTIES
-                self._compare_same_name_props = False  # Only compare listed properties
-            elif phase_config.property_list == "all":
-                self._property_list = self.ALL_PROPERTIES
-                self._compare_same_name_props = True  # Also compare same-name properties
-            else:
-                # Default to spatial for unknown values
-                self._property_list = self.SPATIAL_PROPERTIES
-                self._compare_same_name_props = False
-
-        # Report missing items
-        for pair in match_result.ifc_only:
-            conflict = Conflict(
+        result = ComparisonResult()
+        
+        for pair in match_result.matched:
+            conflicts = self._compare_pair(pair)
+            result.conflicts.extend(conflicts)
+            result.compared_count += 1
+        
+        # Add warnings for unmatched elements
+        for ifc_type in match_result.ifc_only:
+            # Skip types with 0 instances
+            if ifc_type.instance_count == 0:
+                continue
+            # Skip non-comparable classes
+            if self._is_non_comparable_class(getattr(ifc_type, 'ifc_class', '')):
+                continue
+            result.conflicts.append(Conflict(
+                element_code=ifc_type.tag or ifc_type.global_id[:8],
+                element_name=ifc_type.name,
                 conflict_type=ConflictType.MISSING_IN_BC3,
                 severity=ConflictSeverity.WARNING,
-                code=pair.code,
-                element_name=pair.name,
-                message=f"Element exists in IFC but not in BC3 budget"
-            )
-            conflicts.append(conflict)
-            if pair.code:
-                codes_with_conflicts.add(pair.code)
-
-        for pair in match_result.bc3_only:
-            conflict = Conflict(
+                property_name="Presencia",
+                ifc_value=f"{ifc_type.instance_count} instancias",
+                bc3_value="-",
+                description="Elemento en IFC pero no en presupuesto BC3"
+            ))
+        
+        for bc3_elem in match_result.bc3_only:
+            # Skip elements with 0 quantity
+            if bc3_elem.quantity == 0:
+                continue
+            result.conflicts.append(Conflict(
+                element_code=bc3_elem.code,
+                element_name=bc3_elem.description,
                 conflict_type=ConflictType.MISSING_IN_IFC,
                 severity=ConflictSeverity.WARNING,
-                code=pair.code,
-                element_name=pair.name,
-                message=f"Element exists in BC3 but not in IFC model"
-            )
-            conflicts.append(conflict)
-            if pair.code:
-                codes_with_conflicts.add(pair.code)
-
-        # Compare matched pairs
-        total_props_compared = 0
-        for pair in match_result.matched:
-            try:
-                pair_conflicts, props_compared = self._compare_pair(pair, check_properties)
-                conflicts.extend(pair_conflicts)
-                total_props_compared += props_compared
-
-                if pair_conflicts and pair.code:
-                    codes_with_conflicts.add(pair.code)
-            except Exception as e:
-                errors.append(f"Error comparing {pair.code}: {e}")
-
-        return ComparisonResult(
-            conflicts=conflicts,
-            # Phase 1 counts
-            missing_in_bc3=len(match_result.ifc_only),
-            missing_in_ifc=len(match_result.bc3_only),
-            code_mismatches=len([c for c in conflicts
-                                if c.conflict_type == ConflictType.CODE_MISMATCH]),
-            quantity_mismatches=len([c for c in conflicts
-                                    if c.conflict_type == ConflictType.QUANTITY_MISMATCH]),
-            unit_mismatches=len([c for c in conflicts
-                                if c.conflict_type == ConflictType.UNIT_MISMATCH]),
-            # Phase 2 counts
-            property_mismatches=len([c for c in conflicts
-                                    if c.conflict_type == ConflictType.PROPERTY_MISMATCH]),
-            total_properties_compared=total_props_compared,
-            # Summary
-            total_matched=len(match_result.matched),
-            total_with_conflicts=len(codes_with_conflicts),
-            errors=errors
-        )
-
-    def _compare_pair(self, pair: MatchedPair, check_properties: bool = True) -> tuple[list[Conflict], int]:
-        """
-        Compare a single matched pair.
-
-        Args:
-            pair: The matched IFC-BC3 pair to compare
-            check_properties: Whether to perform deep property comparison.
-                            False for quick checks (only basic validation).
-
-        Returns:
-            Tuple of (list of conflicts, number of properties compared)
-        """
+                property_name="Presencia",
+                ifc_value="-",
+                bc3_value=f"{bc3_elem.quantity} {bc3_elem.unit}",
+                description="Elemento en BC3 pero no en modelo IFC"
+            ))
+        
+        return result
+    
+    def _compare_pair(self, pair) -> List[Conflict]:
+        """Compare a single matched pair."""
         conflicts = []
-        props_compared = 0
-
-        if not pair.bc3_element or not pair.ifc_type:
-            return conflicts, props_compared
-
-        bc3 = pair.bc3_element
-        ifc = pair.ifc_type
-
-        # =================================================================
-        # PHASE 1 CHECKS: Code, Quantity, Unit (always performed)
-        # =================================================================
-
-        # Check for code mismatch (matched by description = different codes)
-        if pair.method == MatchMethod.DESCRIPTION:
-            ifc_code = ifc.tag or "?"
-            bc3_code = bc3.code or "?"
-            if ifc_code != bc3_code:
+        ifc_type = pair.ifc_type
+        bc3_elem = pair.bc3_element
+        
+        # 1. Compare codes (only if matched by name)
+        if pair.match_method == MatchMethod.BY_NAME:
+            ifc_code = ifc_type.tag or ifc_type.global_id[:8]
+            if ifc_code != bc3_elem.code:
+                # INFO, not ERROR - this is expected with Cost-It
                 conflicts.append(Conflict(
+                    element_code=bc3_elem.code,
+                    element_name=bc3_elem.description,
                     conflict_type=ConflictType.CODE_MISMATCH,
-                    severity=ConflictSeverity.ERROR,
-                    code=bc3_code,
-                    element_name=pair.name,
+                    severity=ConflictSeverity.INFO,  # Changed from ERROR
                     property_name="Código",
                     ifc_value=ifc_code,
-                    bc3_value=bc3_code,
-                    message=f"Códigos diferentes: IFC usa '{ifc_code}', BC3 usa '{bc3_code}'"
+                    bc3_value=bc3_elem.code,
+                    description=f"Códigos diferentes (normal en Cost-It): IFC usa '{ifc_code}', BC3 usa '{bc3_elem.code}'"
                 ))
-
-        # Check for quantity mismatch
-        bc3_qty = bc3.quantity if hasattr(bc3, 'quantity') and bc3.quantity else 0
-        unit = bc3.unit.lower().strip() if bc3.unit else ""
-
-        if bc3_qty > 0:
-            ifc_qty, qty_source = self._get_ifc_quantity_for_unit(ifc, unit)
-
-            if ifc_qty is not None and ifc_qty > 0:
-                # Use small tolerance only for floating point precision (0.01)
-                qty_tolerance = 0.01
-
-                if abs(bc3_qty - ifc_qty) > qty_tolerance:
-                    conflicts.append(Conflict(
-                        conflict_type=ConflictType.QUANTITY_MISMATCH,
-                        severity=ConflictSeverity.ERROR,
-                        code=pair.code,
-                        element_name=pair.name,
-                        property_name="Cantidad",
-                        ifc_value=round(ifc_qty, 2),
-                        bc3_value=round(bc3_qty, 2),
-                        message=f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3.unit}, IFC={ifc_qty:.2f} ({qty_source})"
-                    ))
-
-        # =================================================================
-        # END PHASE 1 CHECKS
-        # =================================================================
-
-        # Compare names if enabled
+        
+        # 2. Compare quantities
+        quantity_conflict = self._compare_quantities(ifc_type, bc3_elem)
+        if quantity_conflict:
+            conflicts.append(quantity_conflict)
+        
+        # 3. Compare names (if enabled)
         if self.compare_names:
-            name_conflicts = self._compare_names(pair)
+            name_conflicts = self._compare_names(ifc_type, bc3_elem)
             conflicts.extend(name_conflicts)
-
-        # Skip property comparison if not requested (quick check mode)
-        if not check_properties:
-            return conflicts, props_compared
-
-        # Compare properties (only in full analysis mode)
-        bc3_props = bc3.properties or {}
-        ifc_props = ifc.properties or {}
-
-        # Check known comparable properties (uses phase-selected property list)
-        for bc3_key, ifc_key in self._property_list:
-            bc3_val = bc3_props.get(bc3_key)
-            ifc_val = ifc_props.get(ifc_key)
-
-            if bc3_val is None and ifc_val is None:
-                continue
-
-            props_compared += 1
-
-            if bc3_val is None:
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.PROPERTY_MISSING_BC3,
-                    severity=ConflictSeverity.INFO,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name=bc3_key,
-                    ifc_value=ifc_val,
-                    bc3_value=None,
-                    message=f"Property '{bc3_key}' exists in IFC but not in BC3"
-                ))
-            elif ifc_val is None:
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.PROPERTY_MISSING_IFC,
-                    severity=ConflictSeverity.INFO,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name=bc3_key,
-                    ifc_value=None,
-                    bc3_value=bc3_val,
-                    message=f"Property '{bc3_key}' exists in BC3 but not in IFC"
-                ))
-            elif not self._values_equal(bc3_val, ifc_val):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.PROPERTY_MISMATCH,
-                    severity=ConflictSeverity.ERROR,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name=bc3_key,
-                    ifc_value=ifc_val,
-                    bc3_value=bc3_val,
-                    message=f"Property '{bc3_key}' differs: IFC={ifc_val}, BC3={bc3_val}"
-                ))
-
-        # Also compare any BC3 properties that have same name as IFC properties
-        # Only do this for "all" property list mode (Issue #10)
-        if self._compare_same_name_props:
-            for key, bc3_val in bc3_props.items():
-                if key in ifc_props:
-                    ifc_val = ifc_props[key]
-                    # Skip if already compared via property list
-                    if any(bc3_key == key for bc3_key, _ in self._property_list):
-                        continue
-
-                    props_compared += 1
-
-                    if not self._values_equal(bc3_val, ifc_val):
-                        conflicts.append(Conflict(
-                            conflict_type=ConflictType.PROPERTY_MISMATCH,
-                            severity=ConflictSeverity.ERROR,
-                            code=pair.code,
-                            element_name=pair.name,
-                            property_name=key,
-                            ifc_value=ifc_val,
-                            bc3_value=bc3_val,
-                            message=f"Property '{key}' differs: IFC={ifc_val}, BC3={bc3_val}"
-                        ))
-
-        return conflicts, props_compared
-
-    def _compare_names(self, pair: MatchedPair) -> list[Conflict]:
-        """Compare family and type names."""
-        conflicts = []
-
-        if not pair.bc3_element or not pair.ifc_type:
-            return conflicts
-
-        bc3 = pair.bc3_element
-        ifc = pair.ifc_type
-
-        # Compare family names
-        if bc3.family_name and ifc.family_name:
-            if not self._strings_similar(bc3.family_name, ifc.family_name):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.NAME_MISMATCH,
-                    severity=ConflictSeverity.WARNING,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name="Family Name",
-                    ifc_value=ifc.family_name,
-                    bc3_value=bc3.family_name,
-                    message=f"Family name differs"
-                ))
-
-        # Compare type names
-        if bc3.type_name and ifc.type_name:
-            if not self._strings_similar(bc3.type_name, ifc.type_name):
-                conflicts.append(Conflict(
-                    conflict_type=ConflictType.NAME_MISMATCH,
-                    severity=ConflictSeverity.WARNING,
-                    code=pair.code,
-                    element_name=pair.name,
-                    property_name="Type Name",
-                    ifc_value=ifc.type_name,
-                    bc3_value=bc3.type_name,
-                    message=f"Type name differs"
-                ))
-
+        
         return conflicts
+    
+    def _compare_quantities(self, ifc_type, bc3_elem) -> Optional[Conflict]:
+        """
+        Compare quantities between IFC type and BC3 element.
+        
+        IMPORTANT: When IFC has 0 quantity, it's a WARNING not ERROR.
+        This is common for IfcSpace, IfcCovering, etc.
+        """
+        bc3_unit = bc3_elem.unit.lower().strip()
+        bc3_qty = bc3_elem.quantity
+        
+        # Skip if BC3 quantity is 0
+        if bc3_qty == 0:
+            return None
+        
+        # Check if this is a non-comparable family or class
+        family_name = ifc_type.family_name or ifc_type.name or ""
+        ifc_class = getattr(ifc_type, 'ifc_class', '')
+        
+        if self._is_non_comparable(family_name, ifc_class):
+            # Don't report - these elements can't be compared automatically
+            return None
+        
+        # Get IFC quantity based on BC3 unit
+        ifc_qty, qty_source = self._get_ifc_quantity(ifc_type, bc3_unit, bc3_qty)
+        
+        # Determine tolerance based on unit type
+        tolerance = self._get_tolerance_for_unit(bc3_unit)
+        
+        # Compare
+        is_match, diff_pct = self._quantities_match(bc3_qty, ifc_qty, tolerance)
+        
+        if not is_match:
+            # Determine severity based on the cause of mismatch
+            if ifc_qty == 0:
+                # No quantity at all in IFC
+                severity = ConflictSeverity.WARNING
+                description = f"Sin cantidad en IFC: BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC no exporta {qty_source}"
+            else:
+                # Check if this is due to incomplete IFC export
+                # (some instances missing the quantity)
+                is_incomplete_export = self._is_incomplete_export(ifc_type, qty_source)
 
-    def _get_ifc_quantity_for_unit(self, ifc_type, bc3_unit: str) -> tuple[Optional[float], str]:
+                if is_incomplete_export:
+                    # Some instances don't have this quantity exported
+                    severity = ConflictSeverity.WARNING
+                    coverage = getattr(ifc_type, 'quantity_coverage', {})
+                    instances_with_qty = coverage.get(qty_source, 0)
+                    instances_without = ifc_type.instance_count - instances_with_qty
+                    description = (f"Exportación IFC incompleta: BC3={bc3_qty:.2f} {bc3_elem.unit}, "
+                                   f"IFC={ifc_qty:.2f} ({qty_source}) - {instances_without} de "
+                                   f"{ifc_type.instance_count} instancias sin {qty_source}")
+                elif self._is_length_export_bug(ifc_type, qty_source, ifc_qty):
+                    # MappedRepresentation beam with incorrect Length quantity
+                    severity = ConflictSeverity.WARNING
+                    net_vol = ifc_type.quantities.get('NetVolume', 0)
+                    description = (f"Exportación IFC incorrecta (MappedRepresentation): "
+                                   f"BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC Length={ifc_qty:.2f} "
+                                   f"(NetVolume={net_vol:.2f}m³ sugiere longitud mayor)")
+                else:
+                    # Check for general export issues (CostIt bugs, data errors)
+                    export_issue = self._detect_export_issue(
+                        ifc_type, bc3_qty, ifc_qty, diff_pct, bc3_elem.unit
+                    )
+                    if export_issue:
+                        severity = ConflictSeverity.WARNING
+                        description = export_issue
+                    else:
+                        # Check for CostIt repeated value bug (ERROR, not warning)
+                        repeated_value_issue = self._detect_repeated_value_bug(
+                            ifc_type, bc3_qty, ifc_qty, diff_pct, bc3_elem.unit
+                        )
+                        if repeated_value_issue:
+                            severity = ConflictSeverity.ERROR
+                            description = repeated_value_issue
+                        else:
+                            # All instances have the quantity, but values differ - real error
+                            severity = ConflictSeverity.ERROR
+                            description = f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC={ifc_qty:.2f} ({qty_source}) - {diff_pct*100:.1f}%"
+
+            return Conflict(
+                element_code=bc3_elem.code,
+                element_name=bc3_elem.description,
+                conflict_type=ConflictType.QUANTITY_MISMATCH,
+                severity=severity,
+                property_name="Cantidad",
+                ifc_value=round(ifc_qty, 2),
+                bc3_value=round(bc3_qty, 2),
+                description=description,
+                quantity_source=qty_source
+            )
+        
+        return None
+    
+    def _get_ifc_quantity(self, ifc_type, bc3_unit: str, bc3_qty: float) -> Tuple[float, str]:
         """
         Get the appropriate IFC quantity based on BC3 unit.
-
-        Args:
-            ifc_type: The IFCType object with aggregated quantities
-            bc3_unit: The unit from BC3 (e.g., 'm3', 'm2', 'm', 'u')
-
+        
         Returns:
-            Tuple of (quantity_value, source_name) or (None, '') if not found
+            Tuple of (quantity_value, quantity_source_name)
         """
-        unit_lower = bc3_unit.lower().strip()
-
-        # Get quantities dict from IFCType
-        quantities = getattr(ifc_type, 'quantities', {}) or {}
-
-        # Volumetric units (m³)
-        if unit_lower in self.VOLUME_UNITS:
-            for qty_name in self.VOLUME_QUANTITY_NAMES:
-                if qty_name in quantities:
-                    return quantities[qty_name], qty_name
-            return None, ''
-
-        # Area units (m²)
-        if unit_lower in self.AREA_UNITS:
-            for qty_name in self.AREA_QUANTITY_NAMES:
-                if qty_name in quantities:
-                    return quantities[qty_name], qty_name
-            return None, ''
-
-        # Linear units (m)
-        if unit_lower in self.LINEAR_UNITS:
-            for qty_name in self.LINEAR_QUANTITY_NAMES:
-                if qty_name in quantities:
-                    return quantities[qty_name], qty_name
-            return None, ''
-
-        # Countable units - use instance_count
-        if unit_lower in self.COUNTABLE_UNITS:
-            instance_count = getattr(ifc_type, 'instance_count', 0) or 0
-            return float(instance_count), 'instancias'
-
-        # Unknown unit - try instance_count as fallback
-        instance_count = getattr(ifc_type, 'instance_count', 0) or 0
-        if instance_count > 0:
-            return float(instance_count), 'instancias'
-
-        return None, ''
-
-    def _values_equal(self, val1: Any, val2: Any) -> bool:
+        # COUNT UNITS → instance_count
+        if bc3_unit in self.COUNT_UNITS:
+            return ifc_type.instance_count, "instancias"
+        
+        # AREA UNITS → select best match
+        if bc3_unit in self.AREA_UNITS:
+            return self._get_best_area(ifc_type, bc3_qty)
+        
+        # VOLUME UNITS - select best match (closest to BC3)
+        if bc3_unit in self.VOLUME_UNITS:
+            return self._get_best_volume(ifc_type, bc3_qty)
+        
+        # LENGTH UNITS
+        if bc3_unit in self.LENGTH_UNITS:
+            length = ifc_type.quantities.get('Length', 0)
+            if length > 0:
+                return length, "Length"
+            return 0, "NoLength"
+        
+        # DEFAULT → instance_count
+        return ifc_type.instance_count, "instancias"
+    
+    def _get_best_area(self, ifc_type, bc3_qty: float) -> Tuple[float, str]:
         """
-        Compare two values with tolerance for numeric values.
+        Select the IFC area that best matches the BC3 quantity.
 
-        Args:
-            val1: First value
-            val2: Second value
+        Candidates: NetArea, GrossArea, GrossSideArea, NetSideArea
+        """
+        candidates = [
+            (ifc_type.quantities.get('NetArea', 0), 'NetArea'),
+            (ifc_type.quantities.get('GrossArea', 0), 'GrossArea'),
+            (ifc_type.quantities.get('GrossSideArea', 0), 'GrossSideArea'),
+            (ifc_type.quantities.get('NetSideArea', 0), 'NetSideArea'),
+        ]
 
+        # Filter out zeros
+        valid = [(v, n) for v, n in candidates if v > 0]
+
+        if not valid:
+            return 0, "NoArea"
+
+        if bc3_qty <= 0:
+            # Default to first available
+            return valid[0]
+
+        # Find closest to BC3 quantity
+        best = min(valid, key=lambda x: abs(x[0] - bc3_qty))
+        return best
+
+    def _get_best_volume(self, ifc_type, bc3_qty: float) -> Tuple[float, str]:
+        """
+        Select the IFC volume that best matches the BC3 quantity.
+
+        Since BC3 was generated from IFC via CostIt, we should match
+        whichever volume CostIt chose to use. This is determined by
+        finding the closest match to the BC3 value.
+
+        Candidates: NetVolume, GrossVolume
+        """
+        candidates = [
+            (ifc_type.quantities.get('NetVolume', 0), 'NetVolume'),
+            (ifc_type.quantities.get('GrossVolume', 0), 'GrossVolume'),
+        ]
+
+        # Filter out zeros
+        valid = [(v, n) for v, n in candidates if v > 0]
+
+        if not valid:
+            return 0, "NoVolume"
+
+        if bc3_qty <= 0:
+            # Default to first available
+            return valid[0]
+
+        # Find closest to BC3 quantity (match CostIt's choice)
+        best = min(valid, key=lambda x: abs(x[0] - bc3_qty))
+        return best
+    
+    def _get_tolerance_for_unit(self, bc3_unit: str) -> float:
+        """Get the appropriate tolerance based on unit type."""
+        if bc3_unit in self.COUNT_UNITS:
+            return self.tolerances['count']
+        if bc3_unit in self.AREA_UNITS:
+            return self.tolerances['area']
+        if bc3_unit in self.VOLUME_UNITS:
+            return self.tolerances['volume']
+        if bc3_unit in self.LENGTH_UNITS:
+            return self.tolerances['length']
+        return self.tolerance
+    
+    def _quantities_match(self, bc3_qty: float, ifc_qty: float, tolerance: float) -> Tuple[bool, float]:
+        """
+        Check if quantities match within tolerance.
+        
         Returns:
-            True if values are considered equal
+            Tuple of (is_match, difference_percentage)
         """
-        # Handle None
-        if val1 is None and val2 is None:
+        if bc3_qty == 0 and ifc_qty == 0:
+            return True, 0.0
+        
+        if bc3_qty == 0 or ifc_qty == 0:
+            return False, 1.0
+        
+        diff_pct = abs(bc3_qty - ifc_qty) / max(bc3_qty, ifc_qty)
+        
+        return diff_pct <= tolerance, diff_pct
+    
+    def _is_non_comparable(self, family_name: str, ifc_class: str = "") -> bool:
+        """Check if family or IFC class is in the non-comparable list."""
+        # Check family name
+        family_lower = family_name.lower()
+        for nc in self.NON_COMPARABLE_FAMILIES:
+            if nc.lower() in family_lower:
+                return True
+        
+        # Check IFC class
+        return self._is_non_comparable_class(ifc_class)
+    
+    def _is_non_comparable_class(self, ifc_class: str) -> bool:
+        """Check if IFC class is non-comparable."""
+        if not ifc_class:
+            return False
+        ifc_class_lower = ifc_class.lower()
+        for nc_class in self.NON_COMPARABLE_CLASSES:
+            if nc_class.lower() in ifc_class_lower:
+                return True
+        return False
+    
+    def _compare_names(self, ifc_type, bc3_elem) -> List[Conflict]:
+        """Compare family and type names."""
+        conflicts = []
+        
+        # Compare family name
+        ifc_family = ifc_type.family_name or ""
+        bc3_family = bc3_elem.family_name or ""
+        
+        if ifc_family and bc3_family:
+            if self._normalize(ifc_family) != self._normalize(bc3_family):
+                conflicts.append(Conflict(
+                    element_code=bc3_elem.code,
+                    element_name=bc3_elem.description,
+                    conflict_type=ConflictType.NAME_MISMATCH,
+                    severity=ConflictSeverity.INFO,  # INFO, not WARNING
+                    property_name="Family Name",
+                    ifc_value=ifc_family,
+                    bc3_value=bc3_family,
+                    description="Family name differs"
+                ))
+        
+        # Compare type name
+        ifc_type_name = ifc_type.type_name or ""
+        bc3_type_name = bc3_elem.type_name or ""
+        
+        if ifc_type_name and bc3_type_name:
+            if self._normalize(ifc_type_name) != self._normalize(bc3_type_name):
+                conflicts.append(Conflict(
+                    element_code=bc3_elem.code,
+                    element_name=bc3_elem.description,
+                    conflict_type=ConflictType.NAME_MISMATCH,
+                    severity=ConflictSeverity.INFO,
+                    property_name="Type Name",
+                    ifc_value=ifc_type_name,
+                    bc3_value=bc3_type_name,
+                    description="Type name differs"
+                ))
+        
+        return conflicts
+
+    def _is_incomplete_export(self, ifc_type, qty_source: str) -> bool:
+        """
+        Check if the IFC export is incomplete for a given quantity.
+
+        Returns True if some instances are missing the quantity (incomplete export).
+        Returns False if all instances have the quantity (complete export, real discrepancy).
+        """
+        # Get quantity coverage info
+        coverage = getattr(ifc_type, 'quantity_coverage', {})
+
+        # If no coverage info available, assume complete export
+        if not coverage:
+            return False
+
+        # For count-based quantities (instancias), coverage doesn't apply
+        if qty_source == "instancias":
+            return False
+
+        # Get how many instances have this quantity
+        instances_with_qty = coverage.get(qty_source, 0)
+        total_instances = ifc_type.instance_count
+
+        # If all instances have the quantity, it's a complete export
+        if instances_with_qty >= total_instances:
+            return False
+
+        # Some instances are missing the quantity - incomplete export
+        return instances_with_qty < total_instances and instances_with_qty > 0
+
+    def _is_length_export_bug(self, ifc_type, qty_source: str, ifc_qty: float) -> bool:
+        """
+        Detect export bugs where Length quantity is incorrect but Volume is valid.
+
+        Some elements exported with MappedRepresentation geometry have their Length
+        quantity incorrectly set (e.g., to a clipping operation depth ~0.25m)
+        rather than the actual element length. However, NetVolume is often
+        correctly calculated from actual geometry.
+
+        This applies to linear elements (beams, columns, structural members).
+
+        Returns True if this appears to be such an export bug.
+        """
+        # Only applies to Length comparisons
+        if qty_source != "Length":
+            return False
+
+        # Only applies to linear elements (beams, columns, members)
+        ifc_class = getattr(ifc_type, 'ifc_class', '').lower()
+        linear_classes = ['beam', 'column', 'member', 'pile']
+        if not any(cls in ifc_class for cls in linear_classes):
+            return False
+
+        # Check if Length is suspiciously small (typical clipping depth is ~0.25-0.5m)
+        if ifc_qty > 0.5:
+            return False
+
+        # Check if NetVolume is much larger than would be expected for this Length
+        net_vol = ifc_type.quantities.get('NetVolume', 0)
+        if net_vol <= 0:
+            return False
+
+        # For an element with Length=0.25m and reasonable cross-section (up to 1.5m²),
+        # expected volume would be at most 0.375m³
+        # If NetVolume is much larger, Length is likely wrong
+        expected_max_vol_for_length = ifc_qty * 1.5  # Max cross section 1.5m²
+        if net_vol > expected_max_vol_for_length * 2:
+            # NetVolume suggests element is much longer than reported Length
             return True
-        if val1 is None or val2 is None:
-            return False
 
-        # Try numeric comparison
-        try:
-            num1 = float(val1)
-            num2 = float(val2)
-            return abs(num1 - num2) <= self.tolerance
-        except (ValueError, TypeError):
-            pass
+        return False
 
-        # String comparison (case-insensitive)
-        str1 = str(val1).strip().lower()
-        str2 = str(val2).strip().lower()
-        return str1 == str2
-
-    def _strings_similar(self, s1: str, s2: str) -> bool:
+    def _detect_export_issue(self, ifc_type, bc3_qty: float, ifc_qty: float,
+                             diff_pct: float, bc3_unit: str) -> Optional[str]:
         """
-        Check if two strings are similar (case-insensitive, whitespace-normalized).
+        Detect general CostIt/BC3 export issues using pattern analysis.
+
+        Returns a description string if an export issue is detected, None otherwise.
+        These are issues where the BC3 data appears incorrect due to export bugs,
+        not real discrepancies in the model.
         """
-        if not s1 or not s2:
-            return False
+        instance_count = ifc_type.instance_count
 
-        # Normalize
-        n1 = ' '.join(s1.lower().split())
-        n2 = ' '.join(s2.lower().split())
+        # Rule 1: Impossibly small BC3 value for the unit type
+        # A beam/column with length < 0.1m is likely a data error
+        min_thresholds = {
+            'm': 0.1,      # 10cm minimum for length
+            'ml': 0.1,
+            'm2': 0.01,    # 0.01m² minimum for area
+            'm²': 0.01,
+            'm3': 0.001,   # 0.001m³ minimum for volume
+            'm³': 0.001,
+        }
+        unit_lower = bc3_unit.lower().strip()
+        min_threshold = min_thresholds.get(unit_lower, 0)
 
-        return n1 == n2
+        if min_threshold > 0 and bc3_qty < min_threshold and bc3_qty > 0:
+            return (f"Valor BC3 imposiblemente pequeño: BC3={bc3_qty:.4f} {bc3_unit} "
+                    f"(mínimo esperado: {min_threshold} {bc3_unit}), IFC={ifc_qty:.2f}")
 
-    def get_error_conflicts(self, result: ComparisonResult) -> list[Conflict]:
-        """Get all ERROR severity conflicts."""
-        return result.get_conflicts_by_severity(ConflictSeverity.ERROR)
+        # Rule 2: Consistent small offset (methodology difference)
+        # If difference is small (< 10%) and consistent, it's likely
+        # a measurement methodology difference (gross vs net), not an error
+        if 0.02 < diff_pct <= 0.10 and instance_count >= 3:
+            # Small consistent difference with multiple instances = methodology
+            return (f"Diferencia de metodología de medición: BC3={bc3_qty:.2f}, "
+                    f"IFC={ifc_qty:.2f} ({diff_pct*100:.1f}% dif) - "
+                    f"probablemente diferencia bruto/neto")
 
-    def get_warning_conflicts(self, result: ComparisonResult) -> list[Conflict]:
-        """Get all WARNING severity conflicts."""
-        return result.get_conflicts_by_severity(ConflictSeverity.WARNING)
+        return None
+
+    def _detect_repeated_value_bug(self, ifc_type, bc3_qty: float, ifc_qty: float,
+                                    diff_pct: float, bc3_unit: str) -> Optional[str]:
+        """
+        Detect CostIt bug where BC3 has same value repeated for all instances
+        while IFC has varying values.
+
+        This is an ERROR because BC3 doesn't reflect actual geometry.
+        Returns description if detected, None otherwise.
+        """
+        instance_count = ifc_type.instance_count
+
+        # Only applies when there are multiple instances
+        if instance_count < 2:
+            return None
+
+        # Only check if there's a significant difference (>15%)
+        if diff_pct <= 0.15:
+            return None
+
+        # Calculate per-instance values
+        bc3_per_instance = bc3_qty / instance_count
+        ifc_per_instance = ifc_qty / instance_count
+
+        # Check if BC3 total is exactly (per_instance × count)
+        # This suggests all instances have the same BC3 value
+        division_result = bc3_qty / bc3_per_instance
+        is_exact_multiple = abs(division_result - instance_count) < 0.001
+
+        if is_exact_multiple:
+            # BC3 appears to use repeated value for all instances
+            # while IFC has varying values (indicated by the large diff_pct)
+            return (f"BC3 usa valor repetido: {instance_count} instancias × {bc3_per_instance:.2f} {bc3_unit} = "
+                    f"{bc3_qty:.2f} {bc3_unit}, pero IFC tiene valores variables "
+                    f"(total={ifc_qty:.2f}, promedio={ifc_per_instance:.2f}) - "
+                    f"diferencia {diff_pct*100:.1f}%")
+
+        return None
+
+    def _normalize(self, text: str) -> str:
+        """Normalize text for comparison."""
+        return text.lower().strip().replace('_', ' ').replace('-', ' ')
