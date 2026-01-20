@@ -111,7 +111,7 @@ size_excludes = [
     'PIL.ImageQt',
 
     # Heavy ifcopenshell submodules not needed for basic parsing
-    'ifcopenshell.api',
+    # Note: ifcopenshell.api is needed by util modules, don't exclude it
     'ifcopenshell.draw',
     'ifcopenshell.mvd',
     'ifcopenshell.express',
