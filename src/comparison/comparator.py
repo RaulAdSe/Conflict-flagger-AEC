@@ -257,6 +257,13 @@ class Comparator:
                     description = (f"Exportación IFC incompleta: BC3={bc3_qty:.2f} {bc3_elem.unit}, "
                                    f"IFC={ifc_qty:.2f} ({qty_source}) - {instances_without} de "
                                    f"{ifc_type.instance_count} instancias sin {qty_source}")
+                elif self._is_length_export_bug(ifc_type, qty_source, ifc_qty):
+                    # MappedRepresentation beam with incorrect Length quantity
+                    severity = ConflictSeverity.WARNING
+                    net_vol = ifc_type.quantities.get('NetVolume', 0)
+                    description = (f"Exportación IFC incorrecta (MappedRepresentation): "
+                                   f"BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC Length={ifc_qty:.2f} "
+                                   f"(NetVolume={net_vol:.2f}m³ sugiere longitud mayor)")
                 else:
                     # All instances have the quantity, but values differ - real error
                     severity = ConflictSeverity.ERROR
@@ -334,19 +341,32 @@ class Comparator:
 
     def _get_best_volume(self, ifc_type, bc3_qty: float) -> Tuple[float, str]:
         """
-        Select the IFC volume using priority-based selection.
+        Select the IFC volume that best matches the BC3 quantity.
 
-        Priority: NetVolume first, then GrossVolume (not closest-match)
+        Since BC3 was generated from IFC via CostIt, we should match
+        whichever volume CostIt chose to use. This is determined by
+        finding the closest match to the BC3 value.
+
+        Candidates: NetVolume, GrossVolume
         """
-        net_vol = ifc_type.quantities.get('NetVolume', 0)
-        gross_vol = ifc_type.quantities.get('GrossVolume', 0)
+        candidates = [
+            (ifc_type.quantities.get('NetVolume', 0), 'NetVolume'),
+            (ifc_type.quantities.get('GrossVolume', 0), 'GrossVolume'),
+        ]
 
-        # Priority order: NetVolume first, then GrossVolume
-        if net_vol > 0:
-            return net_vol, "NetVolume"
-        if gross_vol > 0:
-            return gross_vol, "GrossVolume"
-        return 0, "NoVolume"
+        # Filter out zeros
+        valid = [(v, n) for v, n in candidates if v > 0]
+
+        if not valid:
+            return 0, "NoVolume"
+
+        if bc3_qty <= 0:
+            # Default to first available
+            return valid[0]
+
+        # Find closest to BC3 quantity (match CostIt's choice)
+        best = min(valid, key=lambda x: abs(x[0] - bc3_qty))
+        return best
     
     def _get_tolerance_for_unit(self, bc3_unit: str) -> float:
         """Get the appropriate tolerance based on unit type."""
@@ -466,6 +486,48 @@ class Comparator:
 
         # Some instances are missing the quantity - incomplete export
         return instances_with_qty < total_instances and instances_with_qty > 0
+
+    def _is_length_export_bug(self, ifc_type, qty_source: str, ifc_qty: float) -> bool:
+        """
+        Detect export bugs where Length quantity is incorrect but Volume is valid.
+
+        Some elements exported with MappedRepresentation geometry have their Length
+        quantity incorrectly set (e.g., to a clipping operation depth ~0.25m)
+        rather than the actual element length. However, NetVolume is often
+        correctly calculated from actual geometry.
+
+        This applies to linear elements (beams, columns, structural members).
+
+        Returns True if this appears to be such an export bug.
+        """
+        # Only applies to Length comparisons
+        if qty_source != "Length":
+            return False
+
+        # Only applies to linear elements (beams, columns, members)
+        ifc_class = getattr(ifc_type, 'ifc_class', '').lower()
+        linear_classes = ['beam', 'column', 'member', 'pile']
+        if not any(cls in ifc_class for cls in linear_classes):
+            return False
+
+        # Check if Length is suspiciously small (typical clipping depth is ~0.25-0.5m)
+        if ifc_qty > 0.5:
+            return False
+
+        # Check if NetVolume is much larger than would be expected for this Length
+        net_vol = ifc_type.quantities.get('NetVolume', 0)
+        if net_vol <= 0:
+            return False
+
+        # For an element with Length=0.25m and reasonable cross-section (up to 1.5m²),
+        # expected volume would be at most 0.375m³
+        # If NetVolume is much larger, Length is likely wrong
+        expected_max_vol_for_length = ifc_qty * 1.5  # Max cross section 1.5m²
+        if net_vol > expected_max_vol_for_length * 2:
+            # NetVolume suggests element is much longer than reported Length
+            return True
+
+        return False
 
     def _normalize(self, text: str) -> str:
         """Normalize text for comparison."""
