@@ -4,13 +4,13 @@
 
 ```bash
 # First time setup (creates both venvs)
-./setup_dev.sh
+./scripts/build/setup_dev.sh
 
 # Run tests
 source venv/bin/activate && pytest tests/
 
 # Build Windows .exe
-wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm scripts/build/conflict_flagger.spec
 ```
 
 ---
@@ -78,12 +78,12 @@ pip install pyinstaller pillow tkinterdnd2
 ### Build the .exe
 
 ```powershell
-pyinstaller --clean --noconfirm conflict_flagger.spec
+pyinstaller --clean --noconfirm scripts/build/conflict_flagger.spec
 ```
 
 Or use the batch file:
 ```powershell
-.\build_windows.bat
+.\scripts\build\build_windows.bat
 ```
 
 ### Output
@@ -132,12 +132,12 @@ wine venv_win/Scripts/pip.exe install pyinstaller pillow tkinterdnd2
 ### Build the .exe
 
 ```bash
-wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm scripts/build/conflict_flagger.spec
 ```
 
 Or shorter (if Wine Python is in PATH):
 ```bash
-wine python -m PyInstaller --clean --noconfirm --distpath dist_win conflict_flagger.spec
+wine python -m PyInstaller --clean --noconfirm --distpath dist_win scripts/build/conflict_flagger.spec
 ```
 
 ### Output
@@ -164,7 +164,7 @@ If you also want a native Mac app:
 source venv/bin/activate
 
 # Build
-pyinstaller --clean --noconfirm conflict_flagger.spec
+pyinstaller --clean --noconfirm scripts/build/conflict_flagger.spec
 ```
 
 Output: `dist/Flagger.app/`
@@ -204,14 +204,14 @@ Output: `dist/Flagger.app/`
 ```powershell
 git pull
 venv\Scripts\activate
-pyinstaller --clean --noconfirm conflict_flagger.spec
+pyinstaller --clean --noconfirm scripts/build/conflict_flagger.spec
 # Output: dist\ConflictFlaggerAEC.exe
 ```
 
 ### For you (Mac via Wine):
 ```bash
 git pull
-wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm conflict_flagger.spec
+wine venv_win/Scripts/pyinstaller.exe --clean --noconfirm scripts/build/conflict_flagger.spec
 # Output: dist/ConflictFlaggerAEC.exe
 ```
 
@@ -315,7 +315,7 @@ Add an exception for the build directory or sign the executable.
 
 If you see `ModuleNotFoundError` for phases or other modules:
 
-1. Verify `conflict_flagger.spec` includes all modules in `datas=[]`
+1. Verify `scripts/build/conflict_flagger.spec` includes all modules in `datas=[]`
 2. Clean build with `--clean` flag
 3. Delete `build/` and `dist/` folders and rebuild
 
@@ -326,7 +326,7 @@ If you see `ModuleNotFoundError` for phases or other modules:
 Before creating a release:
 
 - [ ] All tests pass: `python -m pytest`
-- [ ] Version updated in `conflict_flagger.spec` (if needed)
+- [ ] Version updated in `scripts/build/conflict_flagger.spec` (if needed)
 - [ ] Windows .exe tested (native or Wine)
 - [ ] Create GitHub Release with the executable
 
@@ -336,18 +336,27 @@ Before creating a release:
 
 ```
 conflict-flagger-aec/
-├── conflict_flagger.spec     # PyInstaller configuration
-├── build_app.py              # Python build helper
-├── build_windows.bat         # Windows build script
+├── scripts/
+│   └── build/                # Build scripts and configurations
+│       ├── build_all.sh
+│       ├── build_app.py
+│       ├── build_mac.sh
+│       ├── build_windows.bat
+│       ├── build_windows.sh
+│       ├── conflict_flagger.spec
+│       ├── conflict_flagger_onefile.spec
+│       └── setup_dev.sh
 ├── src/
 │   ├── app_comparator.py     # Main GUI application
+│   ├── main.py               # CLI entry point
 │   ├── phases/
-│   │   ├── __init__.py
-│   │   └── config.py         # Phase configurations
 │   ├── parsers/
 │   ├── matching/
 │   ├── comparison/
 │   └── reporting/
+├── tests/                    # Test suite
+├── docs/                     # Documentation
+│   └── design/               # Design assets
 ├── venv/                     # Mac Python venv
 ├── venv_win/                 # Wine Python venv (Mac only)
 └── dist/                     # Build output

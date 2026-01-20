@@ -17,7 +17,7 @@ from datetime import datetime
 from src.parsers.ifc_parser import IFCParser
 from src.parsers.bc3_parser import BC3Parser
 from src.matching.matcher import Matcher
-from src.comparison.comparator import Comparator
+from src.comparison.comparator import Comparator, ConflictSeverity
 from src.reporting.reporter import Reporter
 from src.phases.config import Phase, get_phase_config
 
@@ -113,13 +113,13 @@ def print_summary(match_result, comparison_result, verbose=False):
     print(f"  Total conflicts:     {summary['total_conflicts']}")
     print(f"  🔴 Errors:           {summary['errors']}")
     print(f"  🟡 Warnings:         {summary['warnings']}")
-    print(f"  Property mismatches: {summary['property_mismatches']}")
+    print(f"  ℹ️  Info:             {summary['infos']}")
 
     if verbose and len(comparison_result.conflicts) > 0:
         print("\n📝 TOP CONFLICTS:")
         for conflict in comparison_result.conflicts[:10]:
-            severity_icon = "🔴" if conflict.severity.value == "error" else "🟡"
-            print(f"  {severity_icon} [{conflict.code}] {conflict.message}")
+            severity_icon = "🔴" if conflict.severity == ConflictSeverity.ERROR else ("🟡" if conflict.severity == ConflictSeverity.WARNING else "ℹ️")
+            print(f"  {severity_icon} [{conflict.element_code}] {conflict.conflict_type.value}: {conflict.description[:60]}...")
 
         if len(comparison_result.conflicts) > 10:
             print(f"  ... and {len(comparison_result.conflicts) - 10} more")
