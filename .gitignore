@@ -4,7 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
+/build/
+!scripts/build/
 develop-eggs/
 dist/
 downloads/
@@ -71,6 +72,7 @@ output/
 # Generated Excel reports (test outputs)
 Informe_*.xlsx
 Report_*.xlsx
+report_*.xlsx
 *_excel.xlsx
 
 # Generated CSV reports
