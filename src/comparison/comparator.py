@@ -133,7 +133,7 @@ class Comparator:
         'A3': ['A3', 'Dimension3'],
         'A4': ['A4', 'Dimension4'],
     }
-    
+
     def __init__(self, tolerance: float = 0.05, compare_names: bool = True):
         """
         Initialize comparator.
@@ -671,13 +671,15 @@ class Comparator:
         'masa térmica', 'absortancia', 'aspereza',
         'definir propiedades térmicas por', 'id de tipo de construcción',
         'construcción analítica',
+        # Project/metadata params (Spanish)
+        'subproyecto', 'envolvente en inserciones', 'envolvente en extremos',
         # Other non-dimensional
         'exportar a ifc', 'exportar tipo a ifc', 'introducir el tipo predefinido de ifc',
         'exportar a ifc como', 'exportar tipo a ifc como',
         'forma de sección', 'clave de nombre de sección', 'nombre de código',
         'código de montaje', 'descripción de montaje',
         'número omniclass', 'título omniclass',
-        'color de relleno de detalle bajo', 'función', 'funci�n',
+        'color de relleno de detalle bajo', 'función',
         'cierre de muro', 'clasificación para incendios',
         'operación', 'tipo de construcción', 'acabado',
     }
@@ -689,7 +691,14 @@ class Comparator:
         if param_lower in self.EXCLUDED_PARAMS:
             return True
         # Check partial matches for common exclusions
-        exclusion_keywords = ['guid', 'omniclass', 'montaje', 'comentarios', 'cost']
+        exclusion_keywords = [
+            'guid', 'omniclass', 'montaje', 'comentarios', 'cost',
+            # Thermal params (often have suffixes like "(R)", "(U)")
+            'resistencia térmica', 'coeficiente de transferencia',
+            'transmitancia', 'absortancia',
+            # Project metadata
+            'subproyecto', 'envolvente',
+        ]
         for keyword in exclusion_keywords:
             if keyword in param_lower:
                 return True

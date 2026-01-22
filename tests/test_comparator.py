@@ -561,3 +561,531 @@ class TestComparatorWithRealFiles:
 
         # Should have some results
         assert comparison.total_matched > 0 or comparison.missing_in_bc3 > 0 or comparison.missing_in_ifc > 0
+
+
+class TestParameterComparison:
+    """
+    Tests for the new parameter comparison functionality added in PR #22.
+
+    Tests cover:
+    - _is_excluded_param() method
+    - _compare_parameters() method
+    - _format_parameter_discrepancies() method
+    - PARAM_MAPPING and EXCLUDED_PARAMS class constants
+    """
+
+    @pytest.fixture
+    def comparator(self):
+        """Create a fresh comparator instance for testing."""
+        return Comparator(tolerance=0.05)
+
+    # =========================================================================
+    # Tests for PARAM_MAPPING constant
+    # =========================================================================
+
+    def test_param_mapping_contains_height_variants(self, comparator):
+        """Test that PARAM_MAPPING contains various height parameter mappings."""
+        assert 'h' in comparator.PARAM_MAPPING
+        assert 'altura' in comparator.PARAM_MAPPING
+        assert 'ALTURA JACENA' in comparator.PARAM_MAPPING
+
+        # Check that height params map to correct IFC properties
+        assert 'Height' in comparator.PARAM_MAPPING['h']
+        assert 'Altura' in comparator.PARAM_MAPPING['altura']
+
+    def test_param_mapping_contains_width_variants(self, comparator):
+        """Test that PARAM_MAPPING contains various width parameter mappings."""
+        assert 'b' in comparator.PARAM_MAPPING
+        assert 'anchura' in comparator.PARAM_MAPPING
+
+        # Check that width params map to correct IFC properties
+        assert 'Width' in comparator.PARAM_MAPPING['b']
+        assert 'Anchura' in comparator.PARAM_MAPPING['anchura']
+
+    def test_param_mapping_contains_thickness_variants(self, comparator):
+        """Test that PARAM_MAPPING contains thickness parameter mappings."""
+        assert 'grosor' in comparator.PARAM_MAPPING
+        assert 'espesor' in comparator.PARAM_MAPPING
+        assert 'e' in comparator.PARAM_MAPPING
+        assert 'ALMA' in comparator.PARAM_MAPPING
+
+    def test_param_mapping_contains_dimension_params(self, comparator):
+        """Test that PARAM_MAPPING contains A1-A4 dimension parameters."""
+        for dim in ['A1', 'A2', 'A3', 'A4']:
+            assert dim in comparator.PARAM_MAPPING
+
+    # =========================================================================
+    # Tests for EXCLUDED_PARAMS constant
+    # =========================================================================
+
+    def test_excluded_params_contains_metadata_params(self, comparator):
+        """Test that EXCLUDED_PARAMS contains metadata parameters."""
+        metadata_params = ['ifcguid', 'nombre de familia', 'nombre de tipo',
+                          'nota clave', 'marca de tipo']
+        for param in metadata_params:
+            assert param in comparator.EXCLUDED_PARAMS
+
+    def test_excluded_params_contains_thermal_params(self, comparator):
+        """Test that EXCLUDED_PARAMS contains thermal parameters."""
+        thermal_params = ['coeficiente de transferencia de calor',
+                         'resistencia térmica', 'masa térmica']
+        for param in thermal_params:
+            assert param in comparator.EXCLUDED_PARAMS
+
+    def test_excluded_params_contains_cost_params(self, comparator):
+        """Test that EXCLUDED_PARAMS contains cost-related parameters."""
+        cost_params = ['costo', 'coste', 'precio']
+        for param in cost_params:
+            assert param in comparator.EXCLUDED_PARAMS
+
+    # =========================================================================
+    # Tests for _is_excluded_param() method
+    # =========================================================================
+
+    def test_is_excluded_param_returns_true_for_exact_match(self, comparator):
+        """Test that _is_excluded_param returns True for exact matches."""
+        assert comparator._is_excluded_param('ifcguid') is True
+        assert comparator._is_excluded_param('costo') is True
+        assert comparator._is_excluded_param('nombre de familia') is True
+
+    def test_is_excluded_param_is_case_insensitive(self, comparator):
+        """Test that _is_excluded_param is case-insensitive."""
+        assert comparator._is_excluded_param('IFCGUID') is True
+        assert comparator._is_excluded_param('IFCGuid') is True
+        assert comparator._is_excluded_param('Costo') is True
+        assert comparator._is_excluded_param('NOMBRE DE FAMILIA') is True
+
+    def test_is_excluded_param_handles_whitespace(self, comparator):
+        """Test that _is_excluded_param handles leading/trailing whitespace."""
+        assert comparator._is_excluded_param('  ifcguid  ') is True
+        assert comparator._is_excluded_param(' costo ') is True
+
+    def test_is_excluded_param_matches_keywords(self, comparator):
+        """Test that _is_excluded_param matches partial keywords."""
+        # Contains 'guid'
+        assert comparator._is_excluded_param('some_guid_value') is True
+        assert comparator._is_excluded_param('tipo_guid_ref') is True
+
+        # Contains 'omniclass'
+        assert comparator._is_excluded_param('OmniClass Number') is True
+
+        # Contains 'montaje'
+        assert comparator._is_excluded_param('codigo montaje') is True
+
+        # Contains 'comentarios'
+        assert comparator._is_excluded_param('comentarios del tipo') is True
+
+        # Contains 'cost'
+        assert comparator._is_excluded_param('cost_estimate') is True
+
+    def test_is_excluded_param_returns_false_for_dimensional_params(self, comparator):
+        """Test that _is_excluded_param returns False for dimensional parameters."""
+        dimensional_params = ['h', 'b', 'altura', 'anchura', 'longitud',
+                             'Height', 'Width', 'Length', 'grosor']
+        for param in dimensional_params:
+            assert comparator._is_excluded_param(param) is False, f"'{param}' should not be excluded"
+
+    def test_is_excluded_param_returns_false_for_quantity_params(self, comparator):
+        """Test that _is_excluded_param returns False for quantity parameters."""
+        quantity_params = ['NetArea', 'GrossArea', 'NetVolume', 'GrossVolume',
+                          'A1', 'A2', 'ALMA']
+        for param in quantity_params:
+            assert comparator._is_excluded_param(param) is False, f"'{param}' should not be excluded"
+
+    # =========================================================================
+    # Tests for _compare_parameters() method
+    # =========================================================================
+
+    def test_compare_parameters_with_matching_values(self, comparator):
+        """Test _compare_parameters with matching BC3 and IFC values."""
+        # Create mock objects with properties attribute
+        class MockBC3:
+            properties = {'h': 0.6, 'b': 0.4}
+
+        class MockIFC:
+            properties = {'Height': 0.6, 'Width': 0.4}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 2
+        # All should match (within tolerance)
+        for c in comparisons:
+            assert c['match'] is True
+
+    def test_compare_parameters_with_mismatched_values(self, comparator):
+        """Test _compare_parameters with mismatched BC3 and IFC values."""
+        class MockBC3:
+            properties = {'h': 0.6, 'b': 0.4}
+
+        class MockIFC:
+            properties = {'Height': 0.8, 'Width': 0.4}  # Height differs by >5%
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 2
+        # h should not match (0.6 vs 0.8 = 25% difference)
+        h_comp = next(c for c in comparisons if c['name'] == 'h')
+        assert h_comp['match'] is False
+        assert h_comp['bc3'] == 0.6
+        assert h_comp['ifc'] == 0.8
+
+        # b should match
+        b_comp = next(c for c in comparisons if c['name'] == 'b')
+        assert b_comp['match'] is True
+
+    def test_compare_parameters_with_missing_ifc_property(self, comparator):
+        """Test _compare_parameters when IFC is missing a property."""
+        class MockBC3:
+            properties = {'h': 0.6, 'b': 0.4, 'ALMA': 0.02}
+
+        class MockIFC:
+            properties = {'Height': 0.6}  # Missing Width and WebThickness
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 3
+
+        # h should have IFC value
+        h_comp = next(c for c in comparisons if c['name'] == 'h')
+        assert h_comp['ifc'] == 0.6
+
+        # b should have None IFC value
+        b_comp = next(c for c in comparisons if c['name'] == 'b')
+        assert b_comp['ifc'] is None
+
+        # ALMA should have None IFC value
+        alma_comp = next(c for c in comparisons if c['name'] == 'ALMA')
+        assert alma_comp['ifc'] is None
+
+    def test_compare_parameters_skips_excluded_params(self, comparator):
+        """Test that _compare_parameters skips excluded parameters."""
+        class MockBC3:
+            properties = {
+                'h': 0.6,
+                'ifcguid': 'abc123',  # Excluded
+                'costo': 150.0,       # Excluded
+                'precio': 200.0       # Excluded
+            }
+
+        class MockIFC:
+            properties = {'Height': 0.6}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # Only 'h' should be compared, excluded params should be skipped
+        assert len(comparisons) == 1
+        assert comparisons[0]['name'] == 'h'
+
+    def test_compare_parameters_skips_zero_values(self, comparator):
+        """Test that _compare_parameters skips zero BC3 values."""
+        class MockBC3:
+            properties = {'h': 0.6, 'b': 0, 'grosor': 0.0}
+
+        class MockIFC:
+            properties = {'Height': 0.6, 'Width': 0.4, 'Thickness': 0.1}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # Only 'h' should be compared (non-zero)
+        assert len(comparisons) == 1
+        assert comparisons[0]['name'] == 'h'
+
+    def test_compare_parameters_skips_non_numeric_values(self, comparator):
+        """Test that _compare_parameters skips non-numeric (string) BC3 values.
+
+        Note: In Python, bool is a subclass of int, so True/False pass the
+        isinstance(value, (int, float)) check. This test verifies strings are skipped.
+        """
+        class MockBC3:
+            properties = {
+                'h': 0.6,
+                'Material': 'Concrete',  # String - should be skipped
+                'Description': 'Test beam'  # String - should be skipped
+            }
+
+        class MockIFC:
+            properties = {'Height': 0.6}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # Only 'h' should be compared (strings are skipped)
+        assert len(comparisons) == 1
+        assert comparisons[0]['name'] == 'h'
+
+    def test_compare_parameters_uses_quantities_dict(self, comparator):
+        """Test that _compare_parameters checks both properties and quantities dicts."""
+        class MockBC3:
+            properties = {'longitud': 5.5, 'h': 0.6}
+
+        class MockIFC:
+            properties = {'Height': 0.6}
+            quantities = {'Length': 5.5}  # Length is in quantities, not properties
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 2
+
+        # longitud should map to Length in quantities
+        long_comp = next(c for c in comparisons if c['name'] == 'longitud')
+        assert long_comp['ifc'] == 5.5
+        assert long_comp['match'] is True
+
+    def test_compare_parameters_case_insensitive_ifc_lookup(self, comparator):
+        """Test that _compare_parameters does case-insensitive IFC property lookup."""
+        class MockBC3:
+            properties = {'h': 0.6}
+
+        class MockIFC:
+            properties = {'height': 0.6}  # lowercase, but should still match
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 1
+        assert comparisons[0]['ifc'] == 0.6
+        assert comparisons[0]['match'] is True
+
+    def test_compare_parameters_empty_bc3_properties(self, comparator):
+        """Test _compare_parameters with empty BC3 properties."""
+        class MockBC3:
+            properties = {}
+
+        class MockIFC:
+            properties = {'Height': 0.6}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 0
+
+    def test_compare_parameters_none_properties(self, comparator):
+        """Test _compare_parameters when properties attribute is None."""
+        class MockBC3:
+            properties = None
+
+        class MockIFC:
+            properties = None
+            quantities = None
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        assert len(comparisons) == 0
+
+    def test_compare_parameters_all_excluded(self, comparator):
+        """Test _compare_parameters when all BC3 params are excluded."""
+        class MockBC3:
+            properties = {
+                'ifcguid': 'guid123',
+                'costo': 100.0,
+                'precio': 150.0,
+                'nombre de familia': 'Test'
+            }
+
+        class MockIFC:
+            properties = {}
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # All params are excluded, so no comparisons
+        assert len(comparisons) == 0
+
+    def test_compare_parameters_tolerance_boundary(self, comparator):
+        """Test _compare_parameters at the 5% tolerance boundary."""
+        class MockBC3:
+            properties = {'h': 1.0}
+
+        class MockIFC:
+            properties = {'Height': 1.05}  # Exactly 5% difference
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # 5% is the boundary - should still match
+        assert comparisons[0]['match'] is True
+
+        # Now test just over 5%
+        class MockIFC2:
+            properties = {'Height': 1.06}  # 6% difference
+            quantities = {}
+
+        ifc_type2 = MockIFC2()
+        comparisons2 = comparator._compare_parameters(ifc_type2, bc3_elem)
+
+        # Over 5% should not match
+        assert comparisons2[0]['match'] is False
+
+    # =========================================================================
+    # Tests for _format_parameter_discrepancies() method
+    # =========================================================================
+
+    def test_format_parameter_discrepancies_empty_list(self, comparator):
+        """Test _format_parameter_discrepancies with empty comparisons list."""
+        result = comparator._format_parameter_discrepancies([])
+        assert result == "Cantidad"
+
+    def test_format_parameter_discrepancies_single_param_with_ifc(self, comparator):
+        """Test formatting a single parameter comparison with IFC value."""
+        comparisons = [{'name': 'h', 'bc3': 0.6, 'ifc': 0.65, 'match': False}]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        assert 'h' in result
+        assert 'bc3: 0,60' in result
+        assert 'ifc: 0,65' in result
+
+    def test_format_parameter_discrepancies_single_param_without_ifc(self, comparator):
+        """Test formatting a single parameter comparison without IFC value."""
+        comparisons = [{'name': 'h', 'bc3': 0.6, 'ifc': None, 'match': True}]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        assert 'h' in result
+        assert 'bc3: 0,60' in result
+        assert 'ifc' not in result  # No IFC value shown
+
+    def test_format_parameter_discrepancies_multiple_params(self, comparator):
+        """Test formatting multiple parameter comparisons."""
+        comparisons = [
+            {'name': 'h', 'bc3': 0.6, 'ifc': 0.65, 'match': False},
+            {'name': 'b', 'bc3': 0.4, 'ifc': 0.4, 'match': True},
+            {'name': 'ALMA', 'bc3': 0.02, 'ifc': None, 'match': True}
+        ]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # All params should be present, separated by semicolons
+        assert 'h' in result
+        assert 'b' in result
+        assert 'ALMA' in result
+        assert ';' in result
+
+    def test_format_parameter_discrepancies_uses_spanish_decimal(self, comparator):
+        """Test that formatting uses comma as decimal separator (Spanish format)."""
+        comparisons = [{'name': 'h', 'bc3': 1.234, 'ifc': 5.678, 'match': False}]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # Should use comma as decimal separator
+        assert '1,23' in result
+        assert '5,68' in result
+        # Should not contain dot as decimal separator
+        assert '1.23' not in result
+        assert '5.68' not in result
+
+    def test_format_parameter_discrepancies_preserves_param_names(self, comparator):
+        """Test that original parameter names are preserved in output."""
+        comparisons = [
+            {'name': 'ALTURA JACENA', 'bc3': 0.6, 'ifc': 0.65, 'match': False},
+            {'name': 'ANCHURA JACENA', 'bc3': 0.4, 'ifc': None, 'match': True}
+        ]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        assert 'ALTURA JACENA' in result
+        assert 'ANCHURA JACENA' in result
+
+    def test_format_parameter_discrepancies_format_structure(self, comparator):
+        """Test the exact format structure of the output."""
+        comparisons = [{'name': 'h', 'bc3': 0.6, 'ifc': 0.65, 'match': False}]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # Expected format: "h (bc3: 0,60, ifc: 0,65)"
+        assert result == "h (bc3: 0,60, ifc: 0,65)"
+
+    def test_format_parameter_discrepancies_format_without_ifc(self, comparator):
+        """Test the exact format structure when IFC value is missing."""
+        comparisons = [{'name': 'h', 'bc3': 0.6, 'ifc': None, 'match': True}]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # Expected format: "h (bc3: 0,60)"
+        assert result == "h (bc3: 0,60)"
+
+    def test_format_parameter_discrepancies_multiple_format(self, comparator):
+        """Test the exact format with multiple parameters."""
+        comparisons = [
+            {'name': 'h', 'bc3': 0.6, 'ifc': 0.65, 'match': False},
+            {'name': 'b', 'bc3': 0.4, 'ifc': None, 'match': True}
+        ]
+
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # Expected format: "h (bc3: 0,60, ifc: 0,65); b (bc3: 0,40)"
+        assert result == "h (bc3: 0,60, ifc: 0,65); b (bc3: 0,40)"
+
+    # =========================================================================
+    # Integration tests combining the methods
+    # =========================================================================
+
+    def test_integration_compare_and_format(self, comparator):
+        """Test full flow from _compare_parameters to _format_parameter_discrepancies."""
+        class MockBC3:
+            properties = {'h': 0.6, 'b': 0.4, 'ALMA': 0.02}
+
+        class MockIFC:
+            properties = {'Height': 0.65}  # Only Height available
+            quantities = {}
+
+        bc3_elem = MockBC3()
+        ifc_type = MockIFC()
+
+        # First compare
+        comparisons = comparator._compare_parameters(ifc_type, bc3_elem)
+
+        # Then format
+        result = comparator._format_parameter_discrepancies(comparisons)
+
+        # Should contain all three parameters
+        assert 'h' in result
+        assert 'b' in result
+        assert 'ALMA' in result
+
+        # h should have both values
+        assert 'ifc: 0,65' in result
+
+        # b and ALMA should only have bc3 values
+        assert result.count('ifc:') == 1  # Only one IFC value (for h)
