@@ -364,7 +364,7 @@ class Reporter:
             ("Elemento", 30),
             ("Tipo de Discrepancia", 25),
             ("Gravedad", 12),
-            ("Propiedad", 20),
+            ("Propiedad", 45),  # Wider for detailed parameter format
             ("Valor IFC (Modelo)", 20),
             ("Valor BC3 (Presupuesto)", 20),
             ("Descripcion del Problema", 50)

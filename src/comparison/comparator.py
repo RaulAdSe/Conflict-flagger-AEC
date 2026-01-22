@@ -77,35 +77,63 @@ class ComparisonResult:
 class Comparator:
     """
     Compares matched IFC-BC3 pairs and finds discrepancies.
-    
+
     TOLERANCES:
     - Count units (u, ud): 0% (must be exact)
     - Areas (m²): 5% (Net vs Gross difference)
     - Volumes (m³): 5%
     - Lengths (m): 2%
     """
-    
+
     # Families where automatic comparison may not be reliable
     NON_COMPARABLE_FAMILIES = [
         'System Panel',
-        'Empty System Panel', 
+        'Empty System Panel',
         'Muro cortina',
         'Curtain Wall',
         'Curtain Panel',
     ]
-    
+
     # IFC classes that often have no quantities
     NON_COMPARABLE_CLASSES = [
         'IfcSpace',       # Rooms/areas - often no area exported
         'IfcCovering',    # Ceilings - inconsistent quantities
     ]
-    
+
     # Unit type mappings
     COUNT_UNITS = ['u', 'ud', 'un', 'pza', 'ut', 'unidad', 'uds', '']
     AREA_UNITS = ['m2', 'm²']
     VOLUME_UNITS = ['m3', 'm³']
     LENGTH_UNITS = ['m', 'ml']
-    
+
+    # Mapping BC3 parameter names to IFC property/quantity names
+    # BC3 name -> list of possible IFC names (in priority order)
+    PARAM_MAPPING = {
+        # Height parameters
+        'h': ['Height', 'Altura', 'height'],
+        'altura': ['Height', 'Altura', 'height'],
+        'ALTURA JÁCENA': ['Height', 'Altura', 'height'],
+        'ALTURA JACENA': ['Height', 'Altura', 'height'],
+        # Width parameters
+        'b': ['Width', 'Anchura', 'width'],
+        'anchura': ['Width', 'Anchura', 'width'],
+        'ANCHURA JÁCENA': ['Width', 'Anchura', 'width'],
+        'ANCHURA JACENA': ['Width', 'Anchura', 'width'],
+        # Thickness parameters
+        'grosor': ['Thickness', 'Grosor', 'thickness'],
+        'espesor': ['Thickness', 'Grosor', 'thickness'],
+        'e': ['Thickness', 'Grosor', 'thickness'],
+        'ALMA': ['WebThickness', 'Alma', 'web_thickness'],
+        # Length parameters
+        'longitud': ['Length', 'Longitud', 'length'],
+        'l': ['Length', 'Longitud', 'length'],
+        # Additional dimensions
+        'A1': ['A1', 'Dimension1'],
+        'A2': ['A2', 'Dimension2'],
+        'A3': ['A3', 'Dimension3'],
+        'A4': ['A4', 'Dimension4'],
+    }
+
     def __init__(self, tolerance: float = 0.05, compare_names: bool = True):
         """
         Initialize comparator.
@@ -285,18 +313,22 @@ class Comparator:
                             severity = ConflictSeverity.ERROR
                             description = f"Cantidad difiere: BC3={bc3_qty:.2f} {bc3_elem.unit}, IFC={ifc_qty:.2f} ({qty_source}) - {diff_pct*100:.1f}%"
 
+            # Compare individual parameters to identify which ones differ
+            param_discrepancies = self._compare_parameters(ifc_type, bc3_elem)
+            property_name = self._format_parameter_discrepancies(param_discrepancies)
+
             return Conflict(
                 element_code=bc3_elem.code,
                 element_name=bc3_elem.description,
                 conflict_type=ConflictType.QUANTITY_MISMATCH,
                 severity=severity,
-                property_name="Cantidad",
+                property_name=property_name,
                 ifc_value=round(ifc_qty, 2),
                 bc3_value=round(bc3_qty, 2),
                 description=description,
                 quantity_source=qty_source
             )
-        
+
         return None
     
     def _get_ifc_quantity(self, ifc_type, bc3_unit: str, bc3_qty: float) -> Tuple[float, str]:
@@ -625,3 +657,143 @@ class Comparator:
     def _normalize(self, text: str) -> str:
         """Normalize text for comparison."""
         return text.lower().strip().replace('_', ' ').replace('-', ' ')
+
+    # Parameters to EXCLUDE from display (not relevant to quantity)
+    EXCLUDED_PARAMS = {
+        # Classification/metadata params
+        'tipo ifcguid', 'ifcguid', 'nombre de familia', 'nombre de tipo',
+        'nota clave', 'marca de tipo', 'costo', 'coste', 'precio',
+        'modelo', 'fabricante', 'url', 'descripción', 'descripcion',
+        'material', 'material estructural',
+        # Thermal/analytical params
+        'coeficiente de transferencia de calor', 'resistencia térmica',
+        'coeficiente de incremento de calor solar', 'transmitancia de luz visual',
+        'masa térmica', 'absortancia', 'aspereza',
+        'definir propiedades térmicas por', 'id de tipo de construcción',
+        'construcción analítica',
+        # Project/metadata params (Spanish)
+        'subproyecto', 'envolvente en inserciones', 'envolvente en extremos',
+        # Other non-dimensional
+        'exportar a ifc', 'exportar tipo a ifc', 'introducir el tipo predefinido de ifc',
+        'exportar a ifc como', 'exportar tipo a ifc como',
+        'forma de sección', 'clave de nombre de sección', 'nombre de código',
+        'código de montaje', 'descripción de montaje',
+        'número omniclass', 'título omniclass',
+        'color de relleno de detalle bajo', 'función',
+        'cierre de muro', 'clasificación para incendios',
+        'operación', 'tipo de construcción', 'acabado',
+    }
+
+    def _is_excluded_param(self, param_name: str) -> bool:
+        """Check if a parameter should be excluded from display."""
+        param_lower = param_name.lower().strip()
+        # Check exact match
+        if param_lower in self.EXCLUDED_PARAMS:
+            return True
+        # Check partial matches for common exclusions
+        exclusion_keywords = [
+            'guid', 'omniclass', 'montaje', 'comentarios', 'cost',
+            # Thermal params (often have suffixes like "(R)", "(U)")
+            'resistencia térmica', 'coeficiente de transferencia',
+            'transmitancia', 'absortancia',
+            # Project metadata
+            'subproyecto', 'envolvente',
+        ]
+        for keyword in exclusion_keywords:
+            if keyword in param_lower:
+                return True
+        return False
+
+    def _compare_parameters(self, ifc_type, bc3_elem) -> List[dict]:
+        """
+        Compare individual parameters between BC3 and IFC.
+
+        Returns a list of parameter comparisons with format:
+        [{'name': 'h', 'bc3': 0.6, 'ifc': 0.65, 'match': False}, ...]
+
+        If IFC doesn't have the parameter, 'ifc' will be None.
+        Shows all numeric parameters from BC3 except excluded ones.
+        """
+        comparisons = []
+        bc3_props = getattr(bc3_elem, 'properties', {}) or {}
+        ifc_props = getattr(ifc_type, 'properties', {}) or {}
+        ifc_quantities = getattr(ifc_type, 'quantities', {}) or {}
+
+        # Combine IFC properties and quantities for lookup
+        ifc_all = {**ifc_props, **ifc_quantities}
+
+        # Tolerance for parameter comparison (5%)
+        param_tolerance = 0.05
+
+        for bc3_param, bc3_value in bc3_props.items():
+            # Skip non-numeric values
+            if not isinstance(bc3_value, (int, float)):
+                continue
+
+            # Skip zero values
+            if bc3_value == 0:
+                continue
+
+            # Skip excluded parameters (metadata, non-dimensional)
+            if self._is_excluded_param(bc3_param):
+                continue
+
+            # Try to find corresponding IFC parameter
+            ifc_value = None
+            bc3_param_lower = bc3_param.lower()
+            mapped_names = self.PARAM_MAPPING.get(bc3_param) or self.PARAM_MAPPING.get(bc3_param_lower)
+
+            if mapped_names:
+                for mapped_name in mapped_names:
+                    if mapped_name in ifc_all:
+                        ifc_value = ifc_all[mapped_name]
+                        break
+                    for ifc_key in ifc_all:
+                        if ifc_key.lower() == mapped_name.lower():
+                            ifc_value = ifc_all[ifc_key]
+                            break
+                    if ifc_value is not None:
+                        break
+
+            # If no mapping, try direct match
+            if ifc_value is None:
+                for ifc_key in ifc_all:
+                    if ifc_key.lower() == bc3_param_lower:
+                        ifc_value = ifc_all[ifc_key]
+                        break
+
+            # Determine if values match
+            match = True
+            if ifc_value is not None and isinstance(ifc_value, (int, float)) and ifc_value != 0:
+                diff_pct = abs(bc3_value - ifc_value) / max(bc3_value, ifc_value)
+                match = diff_pct <= param_tolerance
+
+            comparisons.append({
+                'name': bc3_param,
+                'bc3': bc3_value,
+                'ifc': ifc_value if isinstance(ifc_value, (int, float)) else None,
+                'match': match
+            })
+
+        return comparisons
+
+    def _format_parameter_discrepancies(self, comparisons: List[dict]) -> str:
+        """
+        Format parameter comparisons for display in the property column.
+
+        Shows all dimensional parameters that contribute to the quantity.
+        Format: 'h (bc3: 0,6, ifc: 0,65); b (bc3: 0,6)'
+        """
+        if not comparisons:
+            return "Cantidad"
+
+        parts = []
+        for c in comparisons:
+            bc3_str = f"{c['bc3']:.2f}".replace('.', ',')
+            if c['ifc'] is not None:
+                ifc_str = f"{c['ifc']:.2f}".replace('.', ',')
+                parts.append(f"{c['name']} (bc3: {bc3_str}, ifc: {ifc_str})")
+            else:
+                parts.append(f"{c['name']} (bc3: {bc3_str})")
+
+        return "; ".join(parts) if parts else "Cantidad"
