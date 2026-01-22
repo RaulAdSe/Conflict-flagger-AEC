@@ -7,6 +7,7 @@ KEY BEHAVIORS:
 1. Consolidates types with same Tag (Revit exports duplicates)
 2. Aggregates quantities from all instances to their type
 3. Does NOT divide wall areas (Cost-It measures both faces)
+4. Caches parsed results for faster subsequent loads
 """
 
 from dataclasses import dataclass, field
@@ -14,6 +15,10 @@ from pathlib import Path
 from typing import Optional, Dict, List
 import ifcopenshell
 import ifcopenshell.util.element as element_util
+
+# Global cache for parsed IFC results
+# Key: (file_path, file_mtime, file_size) -> IFCParseResult
+_IFC_CACHE: Dict[tuple, 'IFCParseResult'] = {}
 
 
 @dataclass
@@ -84,12 +89,28 @@ class IFCParser:
     def __init__(self):
         self.ifc_file = None
 
-    def parse(self, file_path: str | Path) -> IFCParseResult:
-        """Parse an IFC file and extract elements with their properties."""
+    def _get_cache_key(self, file_path: Path) -> tuple:
+        """Generate a cache key based on file path, mtime, and size."""
+        stat = file_path.stat()
+        return (str(file_path.absolute()), stat.st_mtime, stat.st_size)
+
+    def parse(self, file_path: str | Path, use_cache: bool = True) -> IFCParseResult:
+        """Parse an IFC file and extract elements with their properties.
+
+        Args:
+            file_path: Path to the IFC file
+            use_cache: If True, use cached results for unchanged files (default: True)
+        """
         file_path = Path(file_path)
 
         if not file_path.exists():
             raise FileNotFoundError(f"IFC file not found: {file_path}")
+
+        # Check cache for unchanged files
+        if use_cache:
+            cache_key = self._get_cache_key(file_path)
+            if cache_key in _IFC_CACHE:
+                return _IFC_CACHE[cache_key]
 
         self.ifc_file = ifcopenshell.open(str(file_path))
 
@@ -106,7 +127,7 @@ class IFCParser:
         # Step 3: Parse elements and aggregate to types
         elements, elements_by_tag = self._parse_elements(types, types_by_tag, errors)
 
-        return IFCParseResult(
+        result = IFCParseResult(
             elements=elements,
             types=types,
             elements_by_tag=elements_by_tag,
@@ -115,6 +136,13 @@ class IFCParser:
             project_name=project_name,
             errors=errors
         )
+
+        # Cache the result for future use
+        if use_cache:
+            cache_key = self._get_cache_key(file_path)
+            _IFC_CACHE[cache_key] = result
+
+        return result
 
     def _get_project_name(self) -> str:
         """Get the project name from IFC."""
