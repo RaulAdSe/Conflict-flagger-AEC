@@ -97,49 +97,56 @@ class Matcher:
                 matched_ifc_ids.add(ifc_type.global_id)
                 matched_bc3_codes.add(bc3_elem.code)
         
-        # Phase 2: Match by Type IFC GUID
+        # Phase 2: Match by Type IFC GUID (OPTIMIZED: O(n) instead of O(n*m))
+        # Build lookup dict for unmatched IFC types by GUID
+        ifc_by_guid = {t.global_id: t for t in ifc_types if t.global_id not in matched_ifc_ids}
+
         for bc3_elem in bc3_elements:
             if bc3_elem.code in matched_bc3_codes:
                 continue
-            
+
             if bc3_elem.type_ifc_guid:
-                # Find IFC type with this GUID
-                for ifc_type in ifc_types:
-                    if ifc_type.global_id in matched_ifc_ids:
-                        continue
-                    if ifc_type.global_id == bc3_elem.type_ifc_guid:
-                        matched.append(MatchedPair(
-                            ifc_type=ifc_type,
-                            bc3_element=bc3_elem,
-                            match_method=MatchMethod.BY_GUID,
-                            match_score=1.0
-                        ))
-                        matched_ifc_ids.add(ifc_type.global_id)
-                        matched_bc3_codes.add(bc3_elem.code)
-                        break
+                # Direct lookup instead of nested loop
+                ifc_type = ifc_by_guid.get(bc3_elem.type_ifc_guid)
+                if ifc_type:
+                    matched.append(MatchedPair(
+                        ifc_type=ifc_type,
+                        bc3_element=bc3_elem,
+                        match_method=MatchMethod.BY_GUID,
+                        match_score=1.0
+                    ))
+                    matched_ifc_ids.add(ifc_type.global_id)
+                    matched_bc3_codes.add(bc3_elem.code)
+                    # Remove from lookup to prevent double-matching
+                    del ifc_by_guid[ifc_type.global_id]
         
-        # Phase 3: Match by Name (if enabled)
+        # Phase 3: Match by Name (if enabled) - OPTIMIZED with cached normalization
         if self.match_by_name:
             unmatched_ifc = [t for t in ifc_types if t.global_id not in matched_ifc_ids]
             unmatched_bc3 = [e for e in bc3_elements if e.code not in matched_bc3_codes]
-            
+
+            # Pre-normalize all IFC names (avoids redundant normalization in inner loop)
+            ifc_normalized = [
+                (t, self._normalize_name(t.name))
+                for t in unmatched_ifc
+            ]
+
             for bc3_elem in unmatched_bc3:
                 best_match = None
                 best_score = self.name_threshold
-                
+
                 bc3_name = self._normalize_name(bc3_elem.description)
-                
-                for ifc_type in unmatched_ifc:
+
+                for ifc_type, ifc_name in ifc_normalized:
                     if ifc_type.global_id in matched_ifc_ids:
                         continue
-                    
-                    ifc_name = self._normalize_name(ifc_type.name)
+
                     score = self._calc_similarity(bc3_name, ifc_name)
-                    
+
                     if score > best_score:
                         best_score = score
                         best_match = ifc_type
-                
+
                 if best_match:
                     matched.append(MatchedPair(
                         ifc_type=best_match,
