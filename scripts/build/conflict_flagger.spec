@@ -31,6 +31,12 @@ essential_hiddenimports = [
     'ifcopenshell.util.element',
     'ifcopenshell.util.unit',
     'ifcopenshell.util.selector',
+    'ifcopenshell.util.representation',
+    'ifcopenshell.util.shape',
+    'ifcopenshell.util.shape_builder',
+    'ifcopenshell.util.placement',
+    # ifcopenshell.api is required by util.shape_builder (transitive dependency)
+    'ifcopenshell.api',
     'openpyxl',
     'openpyxl.styles',
     'openpyxl.utils',
@@ -49,10 +55,20 @@ size_excludes = [
     'unittest',
     'doctest',
 
-    # Scientific computing (not used)
+    # Scientific computing (not used - MAJOR SIZE SAVINGS ~45MB)
     'matplotlib',
     'scipy',
+    'numpy',
+    'numpy.libs',
+    'numpy.core',
+    'numpy.fft',
+    'numpy.linalg',
+    'numpy.random',
     'numpy.testing',
+
+    # Shapely/GEOS (pulled by ifcopenshell but NOT used ~4MB)
+    'shapely',
+    'Shapely.libs',
 
     # Pandas and related (NOT USED - major size savings!)
     'pandas',
@@ -110,6 +126,15 @@ size_excludes = [
     'PySide6',
     'PIL.ImageQt',
 
+    # Unused PIL codecs (~8MB savings)
+    'PIL._avif',
+    'PIL._webp',
+    'PIL._imagingcms',
+
+    # OpenSSL (not used ~6MB)
+    'ssl',
+    '_ssl',
+
     # Heavy ifcopenshell submodules not needed for basic parsing
     # Note: ifcopenshell.api is needed by util modules, don't exclude it
     'ifcopenshell.draw',
@@ -148,6 +173,10 @@ a = Analysis(
 a.datas = [d for d in a.datas if '/tests/' not in d[0] and '/testing/' not in d[0]]
 a.datas = [d for d in a.datas if not d[0].endswith('.rst') and not d[0].endswith('.md')]
 a.datas = [d for d in a.datas if '/docs/' not in d[0] and '/doc/' not in d[0]]
+
+# Strip Tcl/Tk locale and timezone data (~4MB savings, faster Wine startup)
+a.datas = [d for d in a.datas if 'tzdata' not in d[0]]
+a.datas = [d for d in a.datas if '/msgs/' not in d[0] or 'en.' in d[0] or 'en_' in d[0]]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
